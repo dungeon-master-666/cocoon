@@ -1408,7 +1408,67 @@ static td::int64 get_json_value(nlohmann::json &json, const std::vector<std::str
   return ptr->get<td::int64>();
 }
 
+void AnswerPostprocessor::process_json(nlohmann::json &v) {
+  bool updated = false;
+
+  {
+    auto val = get_json_value(v, {"usage", "prompt_tokens"});
+    if (val > prompt_tokens_) {
+      prompt_tokens_ = val;
+      updated = true;
+    }
+  }
+  {
+    auto val = get_json_value(v, {"usage", "prompt_tokens_details", "cached_tokens"});
+    if (val > cached_tokens_) {
+      cached_tokens_ = val;
+      updated = true;
+    }
+  }
+  {
+    auto val = get_json_value(v, {"usage", "completion_tokens"});
+    if (val > completion_tokens_) {
+      completion_tokens_ = val;
+      updated = true;
+    }
+  }
+  {
+    auto val = get_json_value(v, {"usage", "completion_tokens_details", "reasoning_tokens"});
+    if (val > reasoning_tokens_) {
+      reasoning_tokens_ = val;
+      updated = true;
+    }
+  }
+  {
+    auto val = get_json_value(v, {"usage", "reasoning_tokens"});
+    if (val > reasoning_tokens_) {
+      reasoning_tokens_ = val;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    auto prompt_tokens_adj = adjust_tokens(prompt_tokens_ - cached_tokens_, coef_, prompt_tokens_mult_);
+    auto cached_tokens_adj = adjust_tokens(cached_tokens_, coef_, cached_tokens_mult_);
+    auto completion_tokens_adj =
+        adjust_tokens(completion_tokens_ - reasoning_tokens_, coef_, completion_tokens_mult_);
+    auto reasoning_tokens_adj = adjust_tokens(reasoning_tokens_, coef_, reasoning_tokens_mult_);
+
+    v["usage"]["prompt_total_cost"] = (prompt_tokens_adj + cached_tokens_adj) * price_per_token_;
+    v["usage"]["completion_total_cost"] = (completion_tokens_adj + reasoning_tokens_adj) * price_per_token_;
+    v["usage"]["total_cost"] =
+        (prompt_tokens_adj + cached_tokens_adj + completion_tokens_adj + reasoning_tokens_adj) * price_per_token_;
+  }
+
+  if (!sender_private_key_.is_zero()) {
+    encrypt_json(v, sender_private_key_, receiver_public_key_, false);
+  }
+}
+
 std::string AnswerPostprocessor::add_next_answer_slice(td::Slice event) {
+  if (is_sse_) {
+    return add_sse_slice(event);
+  }
   last_ += event.str();
 
   td::StringBuilder sb;
@@ -1421,60 +1481,7 @@ std::string AnswerPostprocessor::add_next_answer_slice(td::Slice event) {
       ss >> v;
       pos = ss.tellg();
 
-      bool updated = false;
-
-      {
-        auto val = get_json_value(v, {"usage", "prompt_tokens"});
-        if (val > prompt_tokens_) {
-          prompt_tokens_ = val;
-          updated = true;
-        }
-      }
-      {
-        auto val = get_json_value(v, {"usage", "prompt_tokens_details", "cached_tokens"});
-        if (val > cached_tokens_) {
-          cached_tokens_ = val;
-          updated = true;
-        }
-      }
-      {
-        auto val = get_json_value(v, {"usage", "completion_tokens"});
-        if (val > completion_tokens_) {
-          completion_tokens_ = val;
-          updated = true;
-        }
-      }
-      {
-        auto val = get_json_value(v, {"usage", "completion_tokens_details", "reasoning_tokens"});
-        if (val > reasoning_tokens_) {
-          reasoning_tokens_ = val;
-          updated = true;
-        }
-      }
-      {
-        auto val = get_json_value(v, {"usage", "reasoning_tokens"});
-        if (val > reasoning_tokens_) {
-          reasoning_tokens_ = val;
-          updated = true;
-        }
-      }
-
-      if (updated) {
-        auto prompt_tokens_adj = adjust_tokens(prompt_tokens_ - cached_tokens_, coef_, prompt_tokens_mult_);
-        auto cached_tokens_adj = adjust_tokens(cached_tokens_, coef_, cached_tokens_mult_);
-        auto completion_tokens_adj =
-            adjust_tokens(completion_tokens_ - reasoning_tokens_, coef_, completion_tokens_mult_);
-        auto reasoning_tokens_adj = adjust_tokens(reasoning_tokens_, coef_, reasoning_tokens_mult_);
-
-        v["usage"]["prompt_total_cost"] = (prompt_tokens_adj + cached_tokens_adj) * price_per_token_;
-        v["usage"]["completion_total_cost"] = (completion_tokens_adj + reasoning_tokens_adj) * price_per_token_;
-        v["usage"]["total_cost"] =
-            (prompt_tokens_adj + cached_tokens_adj + completion_tokens_adj + reasoning_tokens_adj) * price_per_token_;
-      }
-
-      if (!sender_private_key_.is_zero()) {
-        encrypt_json(v, sender_private_key_, receiver_public_key_, false);
-      }
+      process_json(v);
 
       sb << v.dump() << "\n";
     } catch (...) {
@@ -1482,6 +1489,58 @@ std::string AnswerPostprocessor::add_next_answer_slice(td::Slice event) {
     }
   }
   last_ = last_.substr(pos);
+  return sb.as_cslice().str();
+}
+
+std::string AnswerPostprocessor::add_sse_slice(td::Slice event) {
+  last_ += event.str();
+  td::StringBuilder sb;
+  size_t pos = 0;
+  while (true) {
+    auto end = last_.find('\n', pos);
+    if (end == std::string::npos) {
+      break;
+    }
+    auto line = last_.substr(pos, end - pos);
+    pos = end + 1;
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    if (line.empty()) {
+      // An SSE event can span several data lines and arbitrary HTTP chunks.
+      if (sse_has_data_) {
+        if (sse_data_ == "[DONE]" || sse_data_.empty()) {
+          sb << sse_fields_ << "data: " << sse_data_ << "\n\n";
+        } else {
+          try {
+            auto value = nlohmann::json::parse(sse_data_);
+            process_json(value);
+            sb << sse_fields_ << "data: " << value.dump() << "\n\n";
+          } catch (const nlohmann::json::exception &) {
+            LOG(ERROR) << "worker request: invalid JSON in SSE event";
+          }
+        }
+      } else if (!sse_fields_.empty()) {
+        sb << sse_fields_ << "\n";
+      }
+      sse_has_data_ = false;
+      sse_data_.clear();
+      sse_fields_.clear();
+    } else if (line == "data" || line.compare(0, 5, "data:") == 0) {
+      auto data = line == "data" ? std::string() : line.substr(5);
+      if (!data.empty() && data.front() == ' ') {
+        data.erase(0, 1);
+      }
+      if (sse_has_data_) {
+        sse_data_ += '\n';
+      }
+      sse_has_data_ = true;
+      sse_data_ += data;
+    } else {
+      sse_fields_ += line + '\n';
+    }
+  }
+  last_.erase(0, pos);
   return sb.as_cslice().str();
 }
 
@@ -1496,6 +1555,9 @@ ton::tl_object_ptr<cocoon_api::tokensUsed> AnswerPostprocessor::usage() {
 }
 
 std::string AnswerPostprocessor::finalize() {
+  if (is_sse_ && (sse_has_data_ || !sse_fields_.empty())) {
+    LOG(ERROR) << "worker request: incomplete SSE event at end of answer";
+  }
   if (last_.size() > 0) {
     /* probably just whitespace*/
     if (last_.size() >= 4) {

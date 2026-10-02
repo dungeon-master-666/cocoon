@@ -2,7 +2,9 @@
 
 #include <string.h>
 
+#if defined(__i386__) || defined(__x86_64__)
 #include <cpuid.h>
+#endif
 
 #include "td/utils/Slice-decl.h"
 #include "td/utils/format.h"
@@ -149,6 +151,7 @@ td::Result<ProductName> product_name_from_cpu(int family, int extended_model) {
 }
 
 td::Result<ProductName> product_name_from_this_cpu() {
+#if defined(__i386__) || defined(__x86_64__)
   unsigned int eax, ebx, ecx, edx;
 
   if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
@@ -160,6 +163,9 @@ td::Result<ProductName> product_name_from_this_cpu() {
   const auto family = (eax & 0x00000f00) >> 8;
 
   return product_name_from_cpu(extended_family + family, extended_model);
+#else
+  return td::Status::Error("Cannot determine SEV product name on a non-x86 CPU");
+#endif
 }
 
 td::uint32 make_cpu_signature(int cpu_fam_id, int cpu_mod_id, int cpu_stepping) {

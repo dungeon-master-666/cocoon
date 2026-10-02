@@ -66,13 +66,23 @@ class AnswerPostprocessor {
   td::Status add_prompt(td::Slice) {
     return td::Status::OK();
   }
+  void set_sse(bool value) {
+    is_sse_ = value;
+  }
   std::string add_next_answer_slice(td::Slice);
   std::string finalize();
   ton::tl_object_ptr<cocoon_api::tokensUsed> usage();
 
  private:
+  void process_json(nlohmann::json &value);
+  std::string add_sse_slice(td::Slice event);
+
   td::int32 coef_;
   std::string last_;
+  bool is_sse_{false};
+  bool sse_has_data_{false};
+  std::string sse_data_;
+  std::string sse_fields_;
   td::int32 prompt_tokens_mult_;
   td::int32 cached_tokens_mult_;
   td::int32 completion_tokens_mult_;

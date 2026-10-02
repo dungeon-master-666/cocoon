@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <ostream>
+#include <sstream>
 
 int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_INFO);

@@ -3,6 +3,7 @@
 import argparse
 import configparser
 import functools
+import json
 import os
 import re
 import shutil
@@ -85,6 +86,7 @@ class Config:
     test: bool = False
     fake_ton: bool = False  # Disable real TON, use fake TON for testing
     local_mode: bool = False  # True for --local-all and local client execution
+    local_backend: str = '127.0.0.1:8000'
     instance: int = 0
 
     # Worker-specific
@@ -280,7 +282,9 @@ def load_config_from_file(cli_args) -> Config:
 
     if cli_args.local_all:
         return Config(node_type='local_all', spec_dir='', owner_address='', build_dir=build_dir,
-                      prepared_spec_dir=prepared_spec_dir, local_run_dir='/tmp/run/', local_mode=True)
+                      prepared_spec_dir=prepared_spec_dir, local_run_dir='/tmp/run/', local_mode=True,
+                      local_backend=cli_args.local_backend, skip_build=cli_args.skip_build,
+                      just_build=cli_args.just_build, model=cli_args.model or 'Qwen/Qwen3-8B')
 
     node_type = get('type', '').lower()
 
@@ -722,6 +726,7 @@ def run_local_all(cfg):
     print('Fake TON, Test, No VM. Config is mostly ignored')
 
     maybe_build(cfg)
+    local_backend = cfg.local_backend
 
     script_dir = Path(__file__).parent.parent
     prepared_spec_dir = Path(cfg.prepared_spec_dir)
@@ -731,7 +736,7 @@ def run_local_all(cfg):
     base_vars = {
         'owner_address': 'UQAuz15H1ZHrZ_psVrAra7HealMIVeFq0wguqlmFno1f3B-m',
         'root_contract_address': 'EQBT4hy4vMEZ9uxSCuhw_gBKh9_AwmHXLe7Wo0O4Vh-4kRjJ',
-        'model': 'Qwen/Qwen3-8B',
+        'model': cfg.model,
     }
 
     # For local-all, everything runs on 127.0.0.1
@@ -786,6 +791,12 @@ def run_local_all(cfg):
             if cfg_file.name != 'global.config.json':
                 run([str(cocoon_init / 'cocoon-render-config-local'), str(cfg_file)], check=True)
 
+    worker_config_path = Path('/tmp/run/worker-config.json')
+    worker_config = json.loads(worker_config_path.read_text())
+    worker_config['forward_requests_to'] = local_backend
+    worker_config_path.chmod(0o600)
+    worker_config_path.write_text(json.dumps(worker_config, indent=2) + '\n')
+
     # Start all
     print('\nStarting components...')
     run(['rm', '-rf', '/tmp/proxy-db/'], check=False)
@@ -833,9 +844,9 @@ def run_local_all(cfg):
     # Key Manager (magenta)
     key_manager_proc = popen(
         [f'{cfg.build_dir}/key-manager-runner', '--config', '/tmp/run/key-manager-config.json', '-v3', '--disable-ton',
-         '/tmp/run/fake-ton-config.json'],
+         '/tmp/run/fake-ton-config.json', '--connect-to-proxy-via', '127.0.0.1:8116'],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    procs.append(client_proc)
+    procs.append(key_manager_proc)
     t = threading.Thread(target=stream_output, args=(key_manager_proc, 'KEYMANAGER', '35'), daemon=True)
     t.start()
     threads.append(t)
@@ -855,13 +866,24 @@ def run_local_all(cfg):
     print('\nAll components started. Press Ctrl+C to stop.')
 
     try:
-        signal.pause()
+        while True:
+            for p in procs:
+                returncode = p.poll()
+                if returncode is not None:
+                    raise RuntimeError(f'{p.args[0]} exited unexpectedly with status {returncode}')
+            threading.Event().wait(1)
     except KeyboardInterrupt:
         print('\nStopping...')
+    finally:
         for p in procs:
-            p.terminate()
+            if p.poll() is None:
+                p.terminate()
         for p in procs:
-            p.wait(timeout=5)
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
 
 
 def parse_args():
@@ -896,6 +918,8 @@ def parse_args():
     parser.add_argument('--fake-ton', '--pseudo', action='store_true', default=None, dest='fake_ton',
                         help='Fake-TON mode (disable real TON network)')
     parser.add_argument('--local-all', action='store_true', help='Run all components locally')
+    parser.add_argument('--local-backend', default='127.0.0.1:8000',
+                        help='Inference backend host:port for --local-all')
     parser.add_argument('--prepare-only', action='store_true', help='Prepare spec to /tmp/spec/')
     parser.add_argument('--print-only', action='store_true', help='Print command and exit')
     parser.add_argument('--skip-build', action='store_true', help='Skip auto-build (use existing binaries)')

@@ -58,12 +58,24 @@ std::map<std::string, cocoon::RATLSPolicyRef, std::less<>> create_policies_from_
                                                                                        const ProxyConfig &config) {
   std::map<std::string, cocoon::RATLSPolicyRef, std::less<>> policies;
 
+  std::set<std::string> used_policies;
+  bool allow_policy_from_username = false;
+  for (const auto &port_config : config.ports) {
+    used_policies.insert(port_config.policy_name);
+    allow_policy_from_username |= port_config.type == "socks5" && port_config.allow_policy_from_username;
+  }
+
   // Create shared attestation cache for all TDX policies
   auto attestation_cache = cocoon::AttestationCache::create(cocoon::AttestationCache::Config{.max_entries = 10000});
   LOG(INFO) << "Initialized attestation cache (max_entries=10000)";
 
   // Add custom policies from configuration
   for (const auto &policy_config : config.policies) {
+    // A fixed-policy router must not require trust roots for unused TEE policies.
+    // Keep every policy available when SOCKS5 clients can select one by username.
+    if (!allow_policy_from_username && used_policies.count(policy_config.name) == 0) {
+      continue;
+    }
     cocoon::RATLSInterfaceRef ratls = nullptr;
 
     // Might be filled from policy_config

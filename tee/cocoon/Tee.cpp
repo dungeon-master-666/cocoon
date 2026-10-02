@@ -1,6 +1,8 @@
 #include "tee/cocoon/Tee.h"
 
+#if defined(__i386__) || defined(__x86_64__)
 #include <cpuid.h>
+#endif
 
 #include <openssl/bn.h>
 #include <openssl/pem.h>
@@ -253,6 +255,7 @@ td::Result<std::string> generate_self_signed_cert(const tde2e_core::PrivateKey &
 }  // namespace
 
 td::Result<TeeType> TeeInterface::this_cpu_tee_type() {
+#if defined(__i386__) || defined(__x86_64__)
   unsigned int eax, ebx, ecx, edx;
 
   if (__get_cpuid(0, &eax, &ebx, &ecx, &edx)) {
@@ -264,6 +267,7 @@ td::Result<TeeType> TeeInterface::this_cpu_tee_type() {
       return TeeType::Sev;
     }
   }
+#endif
 
   return td::Status::Error("Unsupported Tee type");
 }

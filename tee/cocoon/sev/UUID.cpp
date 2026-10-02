@@ -1,6 +1,6 @@
 #include "tee/cocoon/sev/UUID.h"
 
-#include <byteswap.h>
+#include <utility>
 
 #include "td/utils/Slice-decl.h"
 
@@ -43,9 +43,10 @@ std::string uuid_to_string(td::UInt128 uuid) {
 }
 
 void uuid_bswap(td::UInt128& uuid) {
-  *reinterpret_cast<uint32_t*>(&uuid.raw[0]) = bswap_32(*reinterpret_cast<uint32_t*>(&uuid.raw[0]));
-  *reinterpret_cast<uint16_t*>(&uuid.raw[4]) = bswap_16(*reinterpret_cast<uint16_t*>(&uuid.raw[4]));
-  *reinterpret_cast<uint16_t*>(&uuid.raw[6]) = bswap_16(*reinterpret_cast<uint16_t*>(&uuid.raw[6]));
+  std::swap(uuid.raw[0], uuid.raw[3]);
+  std::swap(uuid.raw[1], uuid.raw[2]);
+  std::swap(uuid.raw[4], uuid.raw[5]);
+  std::swap(uuid.raw[6], uuid.raw[7]);
 }
 
 td::UInt128 uuid_bswap(const td::UInt128& uuid) {

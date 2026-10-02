@@ -115,6 +115,11 @@ void ClientRunningRequest::process_answer_ex_impl(cocoon_api::client_queryAnswer
   std::vector<std::pair<std::string, std::string>> headers;
   for (auto &x : response->headers_) {
     headers.emplace_back(x->name_, x->value_);
+    auto name = x->name_;
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+    if (name == "content-type") {
+      sse_response_ = x->value_.find("text/event-stream") == 0;
+    }
   }
   headers.emplace_back("X-Cocoon-Client-Start", PSTRING() << td::StringBuilder::FixedDouble(started_at_unix_, 6));
   headers.emplace_back("X-Cocoon-Client-End", PSTRING() << td::StringBuilder::FixedDouble(td::Clocks::system(), 6));
@@ -271,6 +276,13 @@ void ClientRunningRequest::add_last_payload_part_with_debug(
 
   if (enable_debug_ && !ext_request_id_.is_zero()) {
     td::actor::send_closure(client_runner_, &ClientRunner::add_request_debug_info, ext_request_id_, v.dump());
+  }
+
+  if (sse_response_) {
+    callback_->receive_payload_part(part.as_slice().str(), false);
+    // SSE comments preserve stream framing, including after the [DONE] event.
+    callback_->receive_payload_part(": cocoon-debug " + v.dump() + "\n\n", false);
+    return;
   }
 
   if (part.size() == 0) {

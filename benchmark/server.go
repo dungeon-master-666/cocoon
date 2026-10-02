@@ -1,8 +1,10 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -55,11 +57,12 @@ func nostream(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	listen := flag.String("listen", ":8000", "HTTP listen address")
+	flag.Parse()
 	http.HandleFunc("/v1/chat/completions", stream)
 	http.HandleFunc("/v1/audio/transcriptions", stream)
 	http.HandleFunc("/v1/completions", stream)
 	http.HandleFunc("/v1/models", nostream)
-	fmt.Println("Server listening on :8000")
-	http.ListenAndServe(":8000", nil)
+	fmt.Printf("Server listening on %s\n", *listen)
+	log.Fatal(http.ListenAndServe(*listen, nil))
 }
-

@@ -170,6 +170,13 @@ void WorkerRunningRequest::start_request() {
 void WorkerRunningRequest::process_request_response(td::int32 status_code,
                                                     std::vector<std::pair<std::string, std::string>> headers,
                                                     std::string payload_part, bool payload_is_completed) {
+  for (const auto &header : headers) {
+    auto name = header.first;
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+    if (name == "content-type") {
+      postprocessor_->set_sse(header.second.find("text/event-stream") == 0);
+    }
+  }
   send_answer(status_code, std::move(headers), std::move(payload_part), payload_is_completed);
 }
 

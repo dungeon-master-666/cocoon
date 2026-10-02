@@ -333,6 +333,9 @@ set(COMMON_LIBRARIES
 add_library(cocoon_common ${COMMON_SOURCE})
 target_link_libraries(cocoon_common PUBLIC ${COMMON_LIBRARIES})
 
+add_executable(test-answer-postprocessor EXCLUDE_FROM_ALL test/test-answer-postprocessor.cpp)
+target_link_libraries(test-answer-postprocessor PRIVATE cocoon_common)
+
 add_executable(client-runner 
   runners/ClientRunner.cpp 
   runners/client/ClientProxyConnection.cpp

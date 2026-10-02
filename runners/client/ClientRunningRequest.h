@@ -107,6 +107,7 @@ class ClientRunningRequest : public td::actor::Actor {
   std::string in_payload_;
   std::unique_ptr<http::HttpRequestCallback> callback_;
   bool answer_sent_{false};
+  bool sse_response_{false};
   bool payload_completed_{false};
   std::shared_ptr<ClientProxyInfo> proxy_;
   TcpClient::ConnectionId proxy_connection_id_;

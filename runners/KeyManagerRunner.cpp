@@ -16,6 +16,7 @@ int main(int argc, char **argv) {
 
   std::string engine_config_filename = "key-manager-config.json";
   std::string pseudo_config_filename = "";
+  std::string connect_to_proxy_via;
   bool check_hash = false;
 
   td::OptionParser option_parser;
@@ -29,6 +30,8 @@ int main(int argc, char **argv) {
   });
   option_parser.add_option('C', "disable-ton", "disable ton and use fake ton config",
                            [&](td::Slice opt) { pseudo_config_filename = opt.str(); });
+  option_parser.add_option('\0', "connect-to-proxy-via", "connect through a SOCKS5 router at ip:port",
+                           [&](td::Slice opt) { connect_to_proxy_via = opt.str(); });
   option_parser.add_option('p', "check-hashes", "check hashes of requesters", [&]() { check_hash = true; });
   option_parser.run(argc, argv, 0).ensure();
 
@@ -47,6 +50,9 @@ int main(int argc, char **argv) {
       }
       if (check_hash) {
         ptr.enable_check_hashes();
+      }
+      if (!connect_to_proxy_via.empty()) {
+        ptr.connection_to_proxy_via(connect_to_proxy_via).ensure();
       }
       ptr.initialize();
     });

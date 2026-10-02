@@ -1,5 +1,7 @@
 #include "tee/cocoon/sev/GuestDevice.h"
 
+#if defined(__linux__)
+
 #include <fcntl.h>
 #include <linux/sev-guest.h>
 #include <sys/ioctl.h>
@@ -162,3 +164,30 @@ td::Result<td::UInt256> GuestDevice::get_derived_key(td::Slice name) const {
 }
 
 }  // namespace sev
+
+#else
+
+namespace sev {
+
+td::Result<GuestDevice> GuestDevice::open() {
+  return td::Status::Error("SEV guest device is only supported on Linux");
+}
+
+GuestDevice::~GuestDevice() = default;
+
+td::Result<AttestationReport> GuestDevice::get_report(const td::UInt512& user_claims_hash) const {
+  return td::Status::Error("SEV guest device is only supported on Linux");
+}
+
+td::Result<std::pair<AttestationReport, std::vector<GuestDevice::CertTableEntry>>> GuestDevice::get_extended_report(
+    const td::UInt512& user_claims_hash) const {
+  return td::Status::Error("SEV guest device is only supported on Linux");
+}
+
+td::Result<td::UInt256> GuestDevice::get_derived_key(td::Slice name) const {
+  return td::Status::Error("SEV guest device is only supported on Linux");
+}
+
+}  // namespace sev
+
+#endif
