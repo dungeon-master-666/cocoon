@@ -95,6 +95,111 @@ cd benchmark
 Runs locally with fake-TON. Benchmark tests network/protocol layer, not AI inference. 
 But if you want, you may use actual inference server instead of fake HTTP one which is started by ./run-benchmark.sh
 
+### Reproducible native smoke and fault tests
+
+From the repository root, run:
+
+```bash
+python3 benchmark/smoke-local.py --build-dir build/local --scenario all
+```
+
+This builds Cocoon and the synthetic Go backend, starts client, proxy, worker,
+key-manager and router with fake TON, waits until the client sees an available
+worker, checks the selected responses, and stops all owned processes. It runs on
+native macOS and Linux without a VM, model download, GPU or real TON connection.
+It requires Python 3.10+, Go 1.18+ and the normal CMake/Ninja/C++ build dependencies
+(including Boost). Submodules must be initialized. With existing Cocoon binaries,
+add `--skip-build`; the Go backend is still rebuilt from the current source.
+If a sandbox cannot write the default Go cache, set `GOCACHE` to a writable
+absolute directory, for example `GOCACHE=/tmp/cocoon-go-cache`.
+
+The default scenario is `normal`: both `/v1/chat/completions` and `/v1/completions`
+are tested in JSON and SSE modes. Assertions cover content, incremental stream
+delivery, exactly one terminal event, and prompt/completion/cached/reasoning usage.
+Synthetic usage is fixed, not a tokenizer measurement. This step does not test
+GPU inference, hardware attestation or payment correctness.
+
+Faults are selected explicitly, without editing code:
+
+```bash
+python3 benchmark/smoke-local.py --build-dir build/local --skip-build --scenario disconnect-mid-stream
+```
+
+| Scenario | Backend behavior |
+|---|---|
+| `normal` | Complete JSON or SSE with usage |
+| `delay-headers` | Wait 750 ms before headers, then complete normally |
+| `delay-body` | Flush headers, wait 750 ms, then complete normally |
+| `hang` | Wait for disconnect; the request has a 4-second Cocoon timeout |
+| `http-error` | HTTP 503 with a JSON error |
+| `disconnect-before-headers` | Close the socket before any HTTP response |
+| `disconnect-after-headers` | Send headers, then break HTTP framing |
+| `disconnect-mid-stream` | Send two SSE content events, then break HTTP framing |
+| `incomplete-json` | Complete HTTP framing with an unfinished JSON object |
+| `incomplete-sse` | Complete HTTP framing without final SSE/usage events |
+
+`all` runs every scenario in a fresh stack. Each run chooses unused loopback
+ports and a separate state directory. Existing processes, databases and
+`/tmp/run` are not reused or removed. Cleanup sends SIGTERM, waits a bounded time,
+then uses SIGKILL if necessary. The smoke test checks that its process groups
+have disappeared and its ports can be bound again. Readiness failure, assertion
+failure, unexpected child exit and cleanup failure produce a nonzero exit code;
+SIGINT/SIGTERM also trigger cleanup.
+
+The printed artifact directory is retained on success and failure. It contains
+build/launcher/backend logs, each runner's log, the rendered configs and databases,
+`stack/processes.json` (owned process IDs and ports), and each scenario's
+`result.json` (response, timings, assertions/limitations and cleanup result).
+`--output-dir /absolute/new/directory` chooses a location; it must not already
+exist. Logs and responses contain only the synthetic test traffic. Remove the
+artifact directory when it is no longer needed.
+
+**Scope of fault results:** step 1 verifies fault injection and records the
+current response. The worker currently treats some truncated responses as a
+successful HTTP EOF; these cases are printed as `KNOWN LIMITATION` and recorded
+in `result.json`. Passing fault injection is not certification of error handling
+or billing. To make this limitation fail the test while implementing pipeline
+step 3, add `--strict-faults`:
+
+```bash
+python3 benchmark/smoke-local.py --skip-build --scenario disconnect-mid-stream --strict-faults
+```
+
+For interactive development, `--local-all` also accepts `--local-run-dir` (a new
+directory) and `--local-port-offset` (applied to every Cocoon listener, including
+router endpoints). Its default ports remain unchanged. Component output is
+saved under the printed directory's `logs/`; stop with Ctrl+C or SIGTERM.
+The backend address is configured separately with `--local-backend host:port`.
+The launcher rejects occupied local ports and existing run directories.
+
+The backend can also run independently:
+
+```bash
+go build -o /tmp/cocoon-backend benchmark/server.go
+/tmp/cocoon-backend --listen 127.0.0.1:8000 --scenario delay-body --delay 2s --chunk-delay 100ms
+```
+
+It follows the request's `stream` flag. Use `stream=false` for `incomplete-json`,
+and `stream=true` for `incomplete-sse` or `disconnect-mid-stream`; incompatible
+combinations return HTTP 400. `/health` and `/v1/models` remain available during
+injected inference faults. The existing `chunks`, `bytes` and `delay_ms` query
+parameters remain usable by direct load tests. The audio endpoint is only a
+synthetic load-test endpoint, not an audio inference simulator.
+
+Additional regression checks:
+
+```bash
+go test benchmark/server.go benchmark/server_test.go
+BUILD_DIR="$PWD/build/local" python3 test/test-local-stack.py -v
+cmake --build build/local --target test-answer-postprocessor
+build/local/test-answer-postprocessor
+```
+
+The lifecycle suite covers signals, automatic builds, partial startup, a crashed
+worker, an unresponsive descendant, occupied ports, preservation of existing
+files, readiness timeouts and interruption during a hung request.
+The C++ test checks JSON/SSE postprocessing and usage across fragmented reads.
+
 ## Use Case 2: Test Images with Fake-TON
 
 Run proxy and worker in TDX VMs with fake TON blockchain.

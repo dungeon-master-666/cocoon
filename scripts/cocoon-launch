@@ -87,6 +87,7 @@ class Config:
     fake_ton: bool = False  # Disable real TON, use fake TON for testing
     local_mode: bool = False  # True for --local-all and local client execution
     local_backend: str = '127.0.0.1:8000'
+    local_port_offset: int = 0
     instance: int = 0
 
     # Worker-specific
@@ -278,14 +279,14 @@ def load_config_from_file(cli_args) -> Config:
 
     script_dir = Path(__file__).parent.parent
     build_dir = get('build_dir') or os.environ.get('BUILD_DIR') or str(script_dir / 'cmake-build-default-tee')
-    prepared_spec_dir = str(Path(tempfile.mkdtemp(prefix='cocoon-spec-')) / 'spec')
-
     if cli_args.local_all:
         return Config(node_type='local_all', spec_dir='', owner_address='', build_dir=build_dir,
-                      prepared_spec_dir=prepared_spec_dir, local_run_dir='/tmp/run/', local_mode=True,
+                      local_run_dir=cli_args.local_run_dir, local_mode=True,
+                      local_port_offset=cli_args.local_port_offset,
                       local_backend=cli_args.local_backend, skip_build=cli_args.skip_build,
                       just_build=cli_args.just_build, model=cli_args.model or 'Qwen/Qwen3-8B')
 
+    prepared_spec_dir = str(Path(tempfile.mkdtemp(prefix='cocoon-spec-')) / 'spec')
     node_type = get('type', '').lower()
 
     instance = getint('instance', 0)
@@ -696,7 +697,7 @@ def run_qemu(cfg: Config):
     os.execvp(qemu[0], qemu)
 
 
-def ensure_build(build_dir: Path, targets: list[str]):
+def ensure_build(build_dir: Path, targets: list[str], run_command=run):
     """Ensure build directory exists and targets are built"""
     script_dir = Path(__file__).parent.parent
 
@@ -704,7 +705,7 @@ def ensure_build(build_dir: Path, targets: list[str]):
     if not (build_dir / 'CMakeCache.txt').exists():
         print(f'Initializing CMake in {build_dir}...')
         build_dir.mkdir(parents=True, exist_ok=True)
-        run(['cmake',
+        run_command(['cmake',
              '-GNinja',
              '-DCMAKE_BUILD_TYPE=RelWithDebInfo',
              '-DBUILD_SHARED_LIBS=OFF',
@@ -717,20 +718,38 @@ def ensure_build(build_dir: Path, targets: list[str]):
 
     # Build targets
     print(f'Building {", ".join(targets)}...')
-    run(['cmake', '--build', str(build_dir), '-j', str(os.cpu_count() or 4),
+    run_command(['cmake', '--build', str(build_dir), '-j', str(os.cpu_count() or 4),
          '--target'] + targets, check=True)
 
 
 def run_local_all(cfg):
+    from local_processes import Processes, check_ports, local_ports
+
     print('=== Running COCOON locally (all components) ===')
     print('Fake TON, Test, No VM. Config is mostly ignored')
 
-    maybe_build(cfg)
+    ports = local_ports(cfg.local_port_offset)
+    check_ports(ports.values())
+    if cfg.local_run_dir:
+        run_dir = Path(cfg.local_run_dir).resolve()
+        run_dir.mkdir(parents=True, exist_ok=False)
+    else:
+        run_dir = Path(tempfile.mkdtemp(prefix='cocoon-local-'))
+    run_dir.chmod(0o700)
+    print(f'Local run directory: {run_dir}', flush=True)
+    with Processes(run_dir / 'logs') as processes:
+        maybe_build(cfg, run_command=functools.partial(processes.run, 'build', timeout=1800))
+        start_local_all(cfg, run_dir, ports, processes)
+
+
+def start_local_all(cfg, run_dir, ports, processes):
     local_backend = cfg.local_backend
+    build_dir = Path(cfg.build_dir).resolve()
 
     script_dir = Path(__file__).parent.parent
-    prepared_spec_dir = Path(cfg.prepared_spec_dir)
-    os.environ['COCOON_SUBST'] = str(Path(cfg.build_dir) / 'tee/cocoon-subst')
+    prepared_spec_dir = run_dir / 'spec'
+    render_env = {**os.environ, 'COCOON_SUBST': str(build_dir / 'tee/cocoon-subst'),
+                  'COCOON_RUN_DIR': str(run_dir)}
 
     # Common test config
     base_vars = {
@@ -751,9 +770,9 @@ def run_local_all(cfg):
             node_type=node_type,
             spec_dir=str(script_dir / 'spec' / f'spec-{node_type}'),
             external_ip='127.0.0.1',  # Local-all uses localhost
-            external_worker_port=11001,
-            external_client_port=11002,
-            external_key_manager_port=13001,
+            external_worker_port=ports['proxy_worker_tls'],
+            external_client_port=ports['proxy_client_tls'],
+            external_key_manager_port=ports['key_manager_tls'],
             node_wallet_key=app_key,  # just for tests make it same as APP_KEY
             fake_ton=True,
             local_mode=True,  # Don't build models for local execution
@@ -764,9 +783,9 @@ def run_local_all(cfg):
         )
         cfg.extra_vars.update({
             'TEE_IMAGE_HASH': hash_val,
-            'TON_CONFIG_FILE': '/tmp/run/global.config.json',
+            'TON_CONFIG_FILE': str(run_dir / 'global.config.json'),
             'APP_KEY': app_key,
-            'DISK_PATH': '/tmp',
+            'DISK_PATH': str(run_dir),
             'MODEL_COMMIT': 'abc123def456',
             'MODEL_VERITY_HASH': '0000000000000000000000000000000000000000000000000000000000000000',
             'IS_DEBUG': int(cfg.test),
@@ -780,110 +799,60 @@ def run_local_all(cfg):
     # Render all
     print('\nRendering configs...')
 
-    # Clean rendered output files first
-    run(['rm', '-rf', '/tmp/run'], check=False)
-    run(['mkdir', '-p', '/tmp/run'], check=True)
-
     cocoon_init = script_dir / 'reprodebian/cocoon-init'
     for spec_dir in specs.values():
-        # Render JSON configs (except global.config.json)
         for cfg_file in Path(spec_dir).glob('*.json'):
             if cfg_file.name != 'global.config.json':
-                run([str(cocoon_init / 'cocoon-render-config-local'), str(cfg_file)], check=True)
+                processes.run('render', [str(cocoon_init / 'cocoon-render-config-local'), str(cfg_file)],
+                              timeout=30, env=render_env)
 
-    worker_config_path = Path('/tmp/run/worker-config.json')
-    worker_config = json.loads(worker_config_path.read_text())
-    worker_config['forward_requests_to'] = local_backend
-    worker_config_path.chmod(0o600)
-    worker_config_path.write_text(json.dumps(worker_config, indent=2) + '\n')
+    # Patch only the dev copies, keeping the measured production specs unchanged.
+    for node_type in specs:
+        path = run_dir / f'{node_type}-config.json'
+        config = json.loads(path.read_text())
+        key = node_type.replace('-', '_')
+        config['http_port'] = ports[f'{key}_http']
+        if node_type == 'proxy':
+            config['workers_rpc_port'] = ports['proxy_worker_rpc']
+            config['client_rpc_port'] = ports['proxy_client_rpc']
+        else:
+            config['rpc_port'] = ports[f'{key}_rpc']
+        if 'connect_to_proxy_via' in config:
+            config['connect_to_proxy_via'] = f"127.0.0.1:{ports['socks']}"
+        if node_type == 'worker':
+            config['forward_requests_to'] = local_backend
+        path.chmod(0o600)
+        path.write_text(json.dumps(config, indent=2) + '\n')
 
-    # Start all
-    print('\nStarting components...')
-    run(['rm', '-rf', '/tmp/proxy-db/'], check=False)
+    manifest = {'ports': ports, 'backend': local_backend, 'processes': {}}
 
-    import threading
+    def start(name, command):
+        proc = processes.start(name, command, cwd=run_dir)
+        manifest['processes'][name] = proc.pid
+        temporary = run_dir / 'processes.json.tmp'
+        temporary.write_text(json.dumps(manifest, indent=2) + '\n')
+        temporary.replace(run_dir / 'processes.json')
+        processes.check()
 
-    def stream_output(proc, prefix, color_code):
-        """Read process output line by line and prefix each line"""
-        for line in proc.stdout:
-            print(f"\033[{color_code}m[{prefix}]\033[0m {line}", end='', flush=True)
+    print('Starting components; output is saved in', run_dir / 'logs', flush=True)
+    start('router', [str(build_dir / 'tee/router'), '-S', f"{ports['socks']}@any",
+                     '-R', f"{ports['proxy_worker_tls']}:127.0.0.1:{ports['proxy_worker_rpc']}@any",
+                     '-R', f"{ports['proxy_client_tls']}:127.0.0.1:{ports['proxy_client_rpc']}@any",
+                     '-R', f"{ports['key_manager_tls']}:127.0.0.1:{ports['key_manager_rpc']}@any",
+                     '--serialize-info'])
+    for node_type in specs:
+        command = [str(build_dir / f'{node_type}-runner'), '--config',
+                   str(run_dir / f'{node_type}-config.json'), '-v3', '--disable-ton',
+                   str(run_dir / 'fake-ton-config.json')]
+        if node_type == 'key-manager':
+            command += ['--connect-to-proxy-via', f"127.0.0.1:{ports['socks']}"]
+        start(node_type, command)
 
-    procs = []
-    threads = []
-
-    # Proxy (blue)
-    proxy_proc = popen(
-        [f'{cfg.build_dir}/proxy-runner', '--config', '/tmp/run/proxy-config.json', '-v3', '--disable-ton',
-         '/tmp/run/fake-ton-config.json'],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    procs.append(proxy_proc)
-    t = threading.Thread(target=stream_output, args=(proxy_proc, 'PROXY ', '34'), daemon=True)
-    t.start()
-    threads.append(t)
-
-    # Worker (green)
-    worker_proc = popen(
-        [f'{cfg.build_dir}/worker-runner', '--config', '/tmp/run/worker-config.json', '-v3', '--disable-ton',
-         '/tmp/run/fake-ton-config.json'],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    procs.append(worker_proc)
-    t = threading.Thread(target=stream_output, args=(worker_proc, 'WORKER', '32'), daemon=True)
-    t.start()
-    threads.append(t)
-
-    # Client (yellow)
-    client_proc = popen(
-        [f'{cfg.build_dir}/client-runner', '--config', '/tmp/run/client-config.json', '-v3', '--disable-ton',
-         '/tmp/run/fake-ton-config.json'],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    procs.append(client_proc)
-    t = threading.Thread(target=stream_output, args=(client_proc, 'CLIENT', '33'), daemon=True)
-    t.start()
-    threads.append(t)
-
-    # Key Manager (magenta)
-    key_manager_proc = popen(
-        [f'{cfg.build_dir}/key-manager-runner', '--config', '/tmp/run/key-manager-config.json', '-v3', '--disable-ton',
-         '/tmp/run/fake-ton-config.json', '--connect-to-proxy-via', '127.0.0.1:8116'],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    procs.append(key_manager_proc)
-    t = threading.Thread(target=stream_output, args=(key_manager_proc, 'KEYMANAGER', '35'), daemon=True)
-    t.start()
-    threads.append(t)
-
-    # Proxy-cli (cyan)
-    proxycli_proc = popen([f'{cfg.build_dir}/tee/router', '-S', '8116@any',
-                           '-R', '11001:127.0.0.1:11101@any',
-                           '-R', '11002:127.0.0.1:11102@any',
-                           '-R', '13001:127.0.0.1:13101@any',
-                           '--serialize-info'],
-                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    procs.append(proxycli_proc)
-    t = threading.Thread(target=stream_output, args=(proxycli_proc, 'ROUTER', '36'), daemon=True)
-    t.start()
-    threads.append(t)
-
-    print('\nAll components started. Press Ctrl+C to stop.')
-
-    try:
-        while True:
-            for p in procs:
-                returncode = p.poll()
-                if returncode is not None:
-                    raise RuntimeError(f'{p.args[0]} exited unexpectedly with status {returncode}')
-            threading.Event().wait(1)
-    except KeyboardInterrupt:
-        print('\nStopping...')
-    finally:
-        for p in procs:
-            if p.poll() is None:
-                p.terminate()
-        for p in procs:
-            try:
-                p.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                p.kill()
-                p.wait()
+    print(f"Client API: http://127.0.0.1:{ports['client_http']}; Ctrl+C to stop.", flush=True)
+    import time
+    while True:
+        processes.check()
+        time.sleep(0.1)
 
 
 def parse_args():
@@ -920,6 +889,8 @@ def parse_args():
     parser.add_argument('--local-all', action='store_true', help='Run all components locally')
     parser.add_argument('--local-backend', default='127.0.0.1:8000',
                         help='Inference backend host:port for --local-all')
+    parser.add_argument('--local-run-dir', help='New directory for --local-all configs, databases and logs')
+    parser.add_argument('--local-port-offset', type=int, default=0, help='Offset all --local-all listener ports')
     parser.add_argument('--prepare-only', action='store_true', help='Prepare spec to /tmp/spec/')
     parser.add_argument('--print-only', action='store_true', help='Print command and exit')
     parser.add_argument('--skip-build', action='store_true', help='Skip auto-build (use existing binaries)')
@@ -945,11 +916,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def maybe_build(cfg: Config):
+def maybe_build(cfg: Config, run_command=run):
     """Build if in source repo and not --skip-build"""
     script_dir = Path(__file__).parent.parent
     if (script_dir / 'tee').is_dir() and not cfg.skip_build:
-        ensure_build(Path(cfg.build_dir), ['cocoon-all'])
+        ensure_build(Path(cfg.build_dir), ['cocoon-all'], run_command=run_command)
     else:
         print("skip building from source")
 
