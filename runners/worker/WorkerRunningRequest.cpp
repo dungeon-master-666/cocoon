@@ -19,6 +19,7 @@
 #include "tl-utils/common-utils.hpp"
 #include "tl/TlObject.h"
 #include "boost-http/http-client.h"
+#include "boost-http/pipeline-metadata.h"
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <vector>
@@ -100,7 +101,8 @@ void WorkerRunningRequest::start_request() {
       if (name_copy == "content-type") {
         content_type = h->value_;
       }
-      if (name_copy == "content-length" || name_copy == "transfer-encoding" || name_copy == "connection") {
+      if (name_copy == "content-length" || name_copy == "transfer-encoding" || name_copy == "connection" ||
+          name_copy.rfind(http::pipeline_header_prefix, 0) == 0) {
         continue;
       }
       headers.emplace_back(h->name_, h->value_);
@@ -171,6 +173,9 @@ void WorkerRunningRequest::start_request() {
   };
   if (!check_deadline())
     return;
+  headers.emplace_back(http::pipeline_request_id_header,
+                       PSTRING() << proxy_connection_id_ << ":" << proxy_request_id_.to_hex());
+  headers.emplace_back(http::pipeline_timeout_header, std::to_string(timeout_ - run_time()));
   http_request_ = http::run_http_request(http_server_address_, request_type, std::move(url), std::move(headers),
                                          new_payload.as_slice().str(), timeout_ - run_time(),
                                          std::make_unique<Cb>(actor_id(this), scheduler_));

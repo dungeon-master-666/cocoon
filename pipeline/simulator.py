@@ -124,7 +124,8 @@ class Handler(HealthHandler):
         acquired = False
         reserved_tokens = 0
         try:
-            if self.path != '/v1/chat/completions':
+            completion = self.path == '/v1/completions'
+            if self.path not in ('/v1/chat/completions', '/v1/completions'):
                 self.reply(404, {'error': 'unknown endpoint'})
                 return
             length = int(self.headers.get('Content-Length', '-1'))
@@ -135,20 +136,32 @@ class Handler(HealthHandler):
             if len(raw) != length:
                 raise ConnectionAbortedError('incomplete request')
             request = json.loads(raw)
-            allowed = {'model', 'messages', 'max_tokens', 'stream', 'stream_options', 'temperature',
-                       'seed', 'simulator'}
+            # Cocoon normalizes both token-limit aliases and retains the public
+            # encryption envelope metadata after worker-side decryption.
+            allowed = {'model', 'messages', 'max_tokens', 'max_completion_tokens', 'stream', 'stream_options',
+                       'temperature', 'seed', 'simulator', 'is_encrypted', 'sender_public_key',
+                       'receiver_public_key', 'encryption_nonce'}
+            if completion:
+                allowed.remove('messages')
+                allowed.add('prompt')
             if not isinstance(request, dict) or set(request) - allowed:
                 raise ValueError('unsupported request fields')
             if request.get('model') != state.args.model:
                 raise ValueError('unsupported model')
             messages = request.get('messages')
+            if completion:
+                if not isinstance(request.get('prompt'), str):
+                    raise ValueError('prompt must be a string')
+                messages = [{'role': 'user', 'content': request['prompt']}]
             if not isinstance(messages, list) or not messages:
                 raise ValueError('messages must be a nonempty list')
             for msg in messages:
                 if (not isinstance(msg, dict) or set(msg) != {'role', 'content'} or
                         msg['role'] not in ('user', 'system', 'assistant') or not isinstance(msg['content'], str)):
                     raise ValueError('unsupported message')
-            count = request.get('max_tokens', 2)
+            count = request.get('max_tokens', request.get('max_completion_tokens', 2))
+            if 'max_completion_tokens' in request and (type(request['max_completion_tokens']) is not int or request['max_completion_tokens'] != count):
+                raise ValueError('conflicting token limits')
             if type(count) is not int or not 1 <= count <= 64:
                 raise ValueError('max_tokens must be within 1..64')
             stream = request.get('stream', False)
@@ -161,8 +174,8 @@ class Handler(HealthHandler):
             if not isinstance(sim, dict) or set(sim) - {'fault', 'token_delay_ms'}:
                 raise ValueError('unsupported simulator request options')
             fault = sim.get('fault', 'none')
-            delay = sim.get('token_delay_ms', 10)
-            if fault not in ('none', 'truncate', 'hang', 'http-error', 'error-event'):
+            delay = sim.get('token_delay_ms', state.args.token_delay_ms)
+            if fault not in ('none', 'truncate', 'hang', 'http-error', 'error-event', 'oversized'):
                 raise ValueError('unsupported fault')
             if type(delay) is not int or not 0 <= delay <= 1000:
                 raise ValueError('invalid token delay')
@@ -192,6 +205,9 @@ class Handler(HealthHandler):
             if fault == 'http-error':
                 self.reply(503, {'error': 'injected backend failure'})
                 return
+            if fault == 'oversized':
+                self.reply(200, {'padding': 'x' * (1048576 + 1)})
+                return
             words = ['simulated' if i % 2 == 0 else 'reply' for i in range(count)]
             usage = {'prompt_tokens': prompt_tokens, 'completion_tokens': count, 'total_tokens': prompt_tokens + count}
             base = {'id': 'simulator-request', 'model': state.args.model}
@@ -209,22 +225,28 @@ class Handler(HealthHandler):
 
                 for index, word in enumerate(words):
                     self.connected_wait(delay / 1000)
-                    event({**base, 'object': 'chat.completion.chunk', 'choices': [
-                        {'index': 0, 'delta': {'content': ('' if index == 0 else ' ') + word}, 'finish_reason': None}]})
+                    text = ('' if index == 0 else ' ') + word
+                    choice = {'index': 0, 'finish_reason': None,
+                              **({'text': text} if completion else {'delta': {'content': text}})}
+                    event({**base, 'object': 'text_completion' if completion else 'chat.completion.chunk', 'choices': [choice]})
                     if fault == 'truncate':
                         return
                     if fault == 'error-event':
                         event({'error': {'message': 'injected stream failure', 'type': 'InternalServerError'}})
                         event('[DONE]')
                         return
-                event({**base, 'object': 'chat.completion.chunk', 'choices': [
-                    {'index': 0, 'delta': {}, 'finish_reason': 'stop'}], 'usage': usage})
+                event({**base, 'object': 'text_completion' if completion else 'chat.completion.chunk', 'choices': [
+                    {'index': 0, **({'text': ''} if completion else {'delta': {}}), 'finish_reason': 'stop'}], 'usage': usage})
                 event('[DONE]')
             else:
                 self.connected_wait(count * delay / 1000)
                 body = {**base, 'object': 'chat.completion', 'choices': [
                     {'index': 0, 'message': {'role': 'assistant', 'content': ' '.join(words)}, 'finish_reason': 'stop'}],
                         'usage': usage}
+                if completion:
+                    body['object'] = 'text_completion'
+                    body['choices'][0].pop('message')
+                    body['choices'][0]['text'] = ' '.join(words)
                 if fault == 'truncate':
                     data = json.dumps(body).encode()
                     self.send_response(200)
@@ -317,6 +339,7 @@ def main():
     parser.add_argument('--scenario', required=True)
     parser.add_argument('--startup-delay-ms', type=int, required=True)
     parser.add_argument('--warmup-delay-ms', type=int, required=True)
+    parser.add_argument('--token-delay-ms', type=int, default=10)
     parser.add_argument('--overlay-ip', choices=('10.231.0.1', '10.231.0.2'))
     args = parser.parse_args()
     os.umask(0o077)

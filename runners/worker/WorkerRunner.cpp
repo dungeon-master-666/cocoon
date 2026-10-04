@@ -68,9 +68,11 @@ void WorkerRunner::receive_request(WorkerProxyInfo &proxy, TcpClient::Connection
     return;
   }
   bool invalid_timeout = !std::isfinite(req.timeout_) || req.timeout_ <= 0;
-  if (invalid_timeout || active_requests_.size() >= static_cast<size_t>(max_active_requests_)) {
+  if (is_disabled() || invalid_timeout || active_requests_.size() >= static_cast<size_t>(max_active_requests_)) {
     td::BufferSlice res = cocoon::create_serialize_tl_object<cocoon_api::proxy_queryAnswerErrorEx>(
-        req.request_id_, ton::ErrorCode::error, invalid_timeout ? "invalid request timeout" : "too many active queries",
+        req.request_id_, ton::ErrorCode::error,
+        is_disabled() ? "worker is disabled"
+                      : (invalid_timeout ? "invalid request timeout" : "too many active queries"),
         1,
         ton::create_tl_object<cocoon_api::proxy_queryFinalInfo>(
             (proto_version >= 2 ? 2 : 0), ton::create_tl_object<cocoon_api::tokensUsed>(0, 0, 0, 0, 0), "",
@@ -760,7 +762,8 @@ std::string WorkerRunner::http_generate_json_stats() {
     if (r) {
       jb.add_element("ton_last_synced_at", r->root_contract_ts);
     }
-    jb.add_element("enabled", true);
+    jb.add_element("enabled", !is_disabled());
+    jb.add_element("uplink_ok", uplink_ok_);
     jb.add_element("git_commit", GitMetadata::CommitSHA1());
     jb.add_element("git_commit_data", GitMetadata::CommitDate());
     jb.stop_object();

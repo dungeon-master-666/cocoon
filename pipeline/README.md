@@ -1,8 +1,8 @@
-# Pipeline-agent — supervisor, группа и WireGuard
+# Pipeline-agent — supervisor, группа, WireGuard и HTTP gate
 
 Агент реализован на C++ с `td::actor`, SHA-256 из `tdutils` и асинхронным HTTP-клиентом Boost.Beast. Он проверяет профиль, запускает локальный backend, выполняет health/warmup, следит за процессами и ограниченно останавливает их. Отдельный Python-процесс `simulator.py` предоставляет dev API через Unix socket. Python-зависимостей вне стандартной библиотеки нет.
 
-Без секции `group` агент работает как локальный supervisor шага 6: `LOCAL_READY` означает warmup **одного** симулятора, `group_ready=false`, `epoch=null`. С секцией `group` включается протокол шага 7: два агента согласуют конфигурацию по mutual TLS и переходят в `READY` после warmup обоих симуляторов. Профиль `simulator-dev-pp2-wg-v1` добавляет настоящий WireGuard и изоляцию сети в Linux, шаг 8. Во всех этих режимах `hardware_attested=false`. Здесь нет распределённой математики, tensor RPC, GPU inference или аппаратной аттестации. Подключение к Cocoon worker остаётся в шаге 9.
+Без секции `group` агент работает как локальный supervisor шага 6: `LOCAL_READY` означает warmup **одного** симулятора, `group_ready=false`, `epoch=null`. С секцией `group` включается протокол шага 7: два агента согласуют конфигурацию по mutual TLS и переходят в `READY` после warmup обоих симуляторов. Профиль `simulator-dev-pp2-wg-v1` добавляет настоящий WireGuard и изоляцию сети в Linux, шаг 8. Секция `gate` у head подключает эту группу к одному Cocoon worker, шаг 9. Во всех этих режимах `hardware_attested=false`. Здесь нет распределённой математики, tensor RPC, GPU inference или аппаратной аттестации.
 
 В целевом CVM deployment агент работает внутри **каждой** CVM. Head CVM содержит `worker-runner`, агент-координатор и rank 0 движка; member CVM — агент и rank 1. Отдельная CVM для координатора не нужна. Нативные проверки ниже запускают эти роли обычными процессами на Mac.
 
@@ -13,9 +13,10 @@
 ```bash
 python3 test/test-pipeline-agent.py --build-dir build/local
 python3 test/test-pipeline-group.py --build-dir build/local
+python3 test/test-pipeline-worker.py --build-dir build/local
 ```
 
-Первая команда проверяет локальный supervisor, вторая — формирование группы. Они собирают необходимые бинарники, выполняют C++ и интеграционные тесты и проверяют отсутствие оставшихся process groups и sockets. При ошибке возвращают ненулевой код. `--no-build` использует существующие бинарники. Нужны локальные Unix/TCP sockets и управление своими дочерними процессами; интернет и GPU не требуются.
+Первая команда проверяет локальный supervisor, вторая — формирование группы, третья — полный запрос Cocoon через gate. Они собирают необходимые бинарники, выполняют C++ и интеграционные тесты и проверяют отсутствие оставшихся process groups и sockets. При ошибке возвращают ненулевой код. `--no-build` использует существующие бинарники. Нужны локальные Unix/TCP sockets и управление своими дочерними процессами; интернет и GPU не требуются.
 
 Логи и `report.json` с результатами, платформой и SHA-256 исходников сохраняются в напечатанном `/tmp/cocoon-agent-*`. Каждый запуск использует новый каталог. Проверки включают:
 
@@ -46,7 +47,7 @@ python3 pipeline/control.py /tmp/cocoon-pipeline-head status
 curl --unix-socket /tmp/cocoon-pipeline-head/health.sock http://localhost/health
 curl --unix-socket /tmp/cocoon-pipeline-head/backend.sock http://localhost/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"cocoon-simulator@v1:dev-fixture","messages":[{"role":"user","content":"hello"}],"max_tokens":2,"stream":true}'
+  -d '{"model":"cocoon-simulator","messages":[{"role":"user","content":"hello"}],"max_tokens":2,"stream":true}'
 python3 pipeline/control.py /tmp/cocoon-pipeline-head stop
 ```
 
@@ -158,7 +159,38 @@ VM-тест проверяет bidirectional TCP echo (по 32 KiB с каждо
 
 ### Что осталось после шага 8
 
-Worker gate/admission и реальный запрос Cocoon — шаг 9; SGLang/vLLM и GPU transport — шаги 10–11; контейнерные/device ограничения и развёртывание — шаг 12; нагрузка и LAN/MTU-проверки — шаг 13. Production attestation — P7-01 и Gate E. `P7-02` остаётся открытым: EOF/PDEATHSIG помогают при гибели агента, но остановка всей cgroup, включая потомков, покинувших process group, внешним supervisor здесь не доказана. Конкретные непокрытые задачи и условия возврата ведутся в [плане](../pipeline-plan.md#за-скобками-реализации-шага-8).
+Worker gate/admission и полный запрос Cocoon реализованы шагом 9. SGLang/vLLM и GPU transport остаются в шагах 10–11; контейнерные/device ограничения и развёртывание — в шаге 12; нагрузка и LAN/MTU-проверки — в шаге 13. Production attestation — P7-01 и Gate E. `P7-02` остаётся открытым: EOF/PDEATHSIG помогают при гибели агента, но остановка всей cgroup, включая потомков, покинувших process group, внешним supervisor здесь не доказана. Конкретные непокрытые задачи и условия возврата ведутся в [плане](../pipeline-plan.md#за-скобками-реализации-шага-8).
+
+## Один worker с gate — шаг 9
+
+Примеры `profiles/group-head.json` и `profiles/network-head.json` открывают gate на `127.0.0.1:18080`. Поле `gate.listen_port` разрешено только head с секцией `group`; member и локальный supervisor без membership не могут публиковать этот API. Адрес всегда loopback, backend socket берётся из launch plan текущего epoch. `/v1/models` возвращает 200 только при готовности всей группы, действующей lease и свежем локальном health; иначе 503.
+
+После запуска двух агентов по примерам выше подключите собранный локальный стенд Cocoon:
+
+```bash
+python3 scripts/cocoon-launch --local-all --skip-build --build-dir build/local \
+  --local-backend 127.0.0.1:18080 --model cocoon-simulator \
+  --local-run-dir /tmp/cocoon-step9 --local-port-offset 2000
+```
+
+Каталог должен быть новым. Запросы отправляются на client API `127.0.0.1:12000` с моделью `cocoon-simulator`. В `effective_config` отдельно сохранён `model_identifier=cocoon-simulator@v1:dev-fixture`, связывающий группу с dev fixture; публичное API-имя находится в `api_model`. Симулятор считает слова вместо настоящих model tokens.
+
+Gate разрешает только `GET /v1/models` и `POST /v1/chat/completions`, `/v1/completions`, без дополнительных URL/query-параметров. Health, profiling, filesystem и admin endpoints backend не экспортируются. JSON/SSE, HTTP status и usage передаются без пересчёта; postprocessing, шифрование и расчёты остаются в worker. Gate не делает retries inference.
+
+Worker удаляет все клиентские headers с префиксом `x-cocoon-pipeline-` и выставляет собственные `x-cocoon-pipeline-request-id` и `x-cocoon-pipeline-timeout-seconds`. Gate требует один ID и один конечный положительный timeout, связывает запрос с текущим epoch, отклоняет повтор активного ID. Эти metadata служат локальному протоколу, не аутентифицируют произвольный процесс внутри guest. Разделение прав сервисов относится к P8-02.
+
+При group failure gate немедленно закрывает принятые запросы этого epoch; при disconnect worker — соответствующий backend UDS. Проверка identity/lease/health повторяется в callbacks, поэтому старые ответы не обслуживают новый epoch. Worker дополнительно проверяет `is_disabled()` на admission. Его monitor обновляет рекламу в proxy по `/v1/models`; это polling, поэтому gate самостоятельно закрывает admission до распространения disabled.
+
+Лимиты доверенного simulator-профиля: request body 8192 bytes, headers 8192 bytes, response body 1 MiB, максимум 16 соединений, два активных inference (или меньший `max_num_seqs`), один пересылаемый chunk до 16 KiB, чтение запроса до 2 с, inference budget до 120 с. Чтение следующего backend chunk начинается после записи предыдущего downstream. Это ограничивает собственный gate, но не заменяет шаг 5 для очередей/памяти полного worker → proxy пути. `status.gate` содержит connections, active_requests и счётчики accepted/completed/failed; completed означает завершённый HTTP transport, а не успешный billing.
+
+Проверка одной командой на Mac — `test/test-pipeline-worker.py` выше. В подготовленной Linux VM:
+
+```bash
+orbctl run -m cocoon-pipeline-net -u root python3 \
+  /work/cocoon/test/test-pipeline-worker.py --build-dir /opt/cocoon-build --network
+```
+
+Linux-тест запускает Cocoon services и gate в head underlay namespace, где их служебные соединения идут через разрешённый loopback. Оба backend работают в отдельных engine namespaces за настоящим WireGuard. Это полный запрос в изолированном dev-стенде; внешний TON/Cocoon egress CVM и образ production не квалифицируются — P8-01/P8-02 остаются открытыми. Проверяются JSON/SSE, шифрование, ненулевая оплата успеха, нулевая оплата ошибок, несколько запросов одного epoch, member crash во время streaming, disabled/readiness, новый epoch, очистка старых backend и новый успешный запрос. Итог и границы — в [STEP9-REPORT.md](STEP9-REPORT.md).
 
 ## Доверенный профиль и runtime
 
@@ -175,6 +207,8 @@ Worker gate/admission и реальный запрос Cocoon — шаг 9; SGLa
 | `limits.max_num_batched_tokens` | От `max_model_len` до 512, default 512 |
 | `simulator.scenario` | Сценарий из таблицы ниже, default `normal` |
 | `simulator.startup_delay_ms`, `simulator.warmup_delay_ms` | Целое 0–30000, default 0 |
+| `simulator.token_delay_ms` | Целое 0–1000, default 10; задержка dev-генерации |
+| `gate.listen_port` | Только head с `group`, TCP 1024–65535; слушает исключительно `127.0.0.1` |
 | `group.peer_port` | Только head, TCP 1024–65535; WG-профиль: только 12310 |
 | `group.listen_port` | Только member, TCP 1024–65535; WG-профиль: только 12310 |
 | `group.peer_host`, `group.listen_host` | Нативный профиль: только `127.0.0.1`; WG: соответствующий `network.peer_ip` / `underlay_ip`, это же default |
@@ -225,4 +259,4 @@ Backend запускается через `posix_spawn` в собственно�
 | `crash-after-ready` | Процесс выходит с кодом 23 после warmup |
 | `stubborn-child` | Создаётся потомок, игнорирующий SIGTERM |
 
-Пример добавления к runtime JSON: `"simulator": {"scenario": "warmup-hang"}`. Дополнительно запрос API может содержать dev-поле `simulator` с `fault` (`none`, `truncate`, `hang`, `http-error`, `error-event`) и `token_delay_ms` (0–1000). Эти сценарии нужны для gate/integration tests и не заменяют отдельные проверки HTTP lifecycle и лимитов существующего worker в шагах 3–5.
+Пример добавления к runtime JSON: `"simulator": {"scenario": "warmup-hang"}`. Дополнительно запрос API может содержать dev-поле `simulator` с `fault` (`none`, `truncate`, `hang`, `http-error`, `error-event`, `oversized`) и `token_delay_ms` (0–1000). Эти сценарии нужны для gate/integration tests и не заменяют отдельные проверки HTTP lifecycle и лимитов существующего worker в шагах 3–5.

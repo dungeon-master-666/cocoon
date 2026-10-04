@@ -43,7 +43,7 @@ def alive(pid):
 
 
 class Node:
-    def __init__(self, lab, rank):
+    def __init__(self, lab, rank, **options):
         self.lab, self.rank = lab, rank
         self.root = lab.root / f'r{rank}'
         self.root.mkdir(mode=0o711)
@@ -51,7 +51,7 @@ class Node:
         self.config = self.root / 'config.json'
         cfg = {'profile': 'simulator-dev-pp2-wg-v1', 'rank': rank, 'role': 'head' if rank == 0 else 'member',
                'group': {'peer_port' if rank == 0 else 'listen_port': 12310},
-               'network': {'underlay_ip': lab.ip[rank], 'peer_ip': lab.ip[1-rank]}}
+               'network': {'underlay_ip': lab.ip[rank], 'peer_ip': lab.ip[1-rank]}, **options}
         self.config.write_text(json.dumps(cfg))
         self.log = (self.root / 'agent.log').open('w')
         # Preserve the mount namespace so agent-created /run/netns mounts are

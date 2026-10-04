@@ -230,7 +230,9 @@ def run(args, output):
                         snapshot = smoke.statistics(ports)
                         return all(p['earned_tokens_committed_to_proxy_db'] == p['earned_tokens_max_known']
                                    for p in snapshot['worker']['proxies'])
-                    smoke.wait_ready(processes, balance_persisted, 15)
+                    # WorkerRunner compares payment state every 10..20 seconds;
+                    # allow one full poll plus the proxy's 1..2 second DB flush.
+                    smoke.wait_ready(processes, balance_persisted, 25)
                     previous = backend.snapshot()
                     before = worker_stats(ports)
                     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:

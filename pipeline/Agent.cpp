@@ -27,6 +27,8 @@ Agent::Agent(Config config, std::string run_dir, int *exit_code)
 }
 
 Agent::~Agent() {
+  if (gate_)
+    gate_->close();
   if (group_)
     group_->close();
   close_control();
@@ -74,6 +76,7 @@ Json Agent::status() const {
           {"group_ready", group_ && group_->ready() && !stopping_ && !finished_},
           {"epoch", group_ ? group_status.at("epoch") : Json(nullptr)},
           {"group", group_status},
+          {"gate", gate_ ? gate_->status() : Json(nullptr)},
           {"boot_id", boot_id_},
           {"attempt", attempt_},
           {"last_failure", last_failure_},
@@ -108,6 +111,10 @@ void Agent::start_up() {
   try {
     open_control();
     adapter_ = make_adapter(config_);
+    if (config_.gate_port) {
+      gate_ = std::make_shared<Gate>(io_, config_, [this] { return gate_state(); });
+      gate_->start();
+    }
     if (config_.group) {
       boot_id_ = random_id();
       identity_ = make_identity(config_.group->certificate_base);
@@ -166,6 +173,8 @@ void Agent::begin_stop(const std::string &reason) {
     return;
   }
   stopping_ = true;
+  if (gate_)
+    gate_->invalidate();
   if (group_)
     group_->stop(reason);
   if (probe_) {
@@ -213,6 +222,8 @@ void Agent::finish_stop() {
     return;
   }
   finished_ = true;
+  if (gate_)
+    gate_->close();
   state_ = failure_.empty() ? "STOPPED" : "FAILED";
   try {
     publish();
@@ -235,6 +246,13 @@ bool Agent::probe_valid(bool warmup) const {
   } catch (const std::exception &) {
     return false;
   }
+}
+
+GateState Agent::gate_state() const {
+  if (!group_ || !group_->ready() || stopping_ || finished_ || state_ != "LOCAL_READY" ||
+      Clock::now() - last_health_ >= std::chrono::milliseconds(config_.profile.watchdog_ms))
+    return {};
+  return {true, group_->epoch(), plan_.api_socket};
 }
 
 void Agent::poll_control(Time now) {
@@ -330,6 +348,8 @@ void Agent::tick() {
       publish();
     }
   }
+  if (gate_)
+    gate_->tick();
   if (listener_ >= 0) {
     poll_control(now);
   }

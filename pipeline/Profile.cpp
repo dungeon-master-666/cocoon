@@ -60,7 +60,7 @@ std::string config_digest(const Json &effective) {
 }
 
 Config validate_config(const Json &runtime, SecurityMode build_policy) {
-  require_fields(runtime, {"profile", "rank", "role", "limits", "simulator", "group", "network"}, "runtime");
+  require_fields(runtime, {"profile", "rank", "role", "limits", "simulator", "group", "network", "gate"}, "runtime");
   const auto id = runtime.at("profile").get<std::string>();
   // Trusted catalogue, compiled into the measured executable. Runtime selects
   // an entry; it cannot supply commands, images, policy or environment variables.
@@ -107,7 +107,7 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
   int seqs = integer(limits, "max_num_seqs", 2, 1, 2);
   int batch = integer(limits, "max_num_batched_tokens", 512, context, 512);
   const auto sim = runtime.value("simulator", Json::object());
-  require_fields(sim, {"scenario", "startup_delay_ms", "warmup_delay_ms"}, "simulator");
+  require_fields(sim, {"scenario", "startup_delay_ms", "warmup_delay_ms", "token_delay_ms"}, "simulator");
   const auto scenario = sim.value("scenario", std::string("normal"));
   const std::set<std::string> scenarios{"normal",      "startup-exit", "startup-hang",      "warmup-error",
                                         "warmup-hang", "health-hang",  "crash-after-ready", "stubborn-child"};
@@ -119,6 +119,7 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
                     {"security_mode", "dev"},
                     {"security_policy_version", "dev-local-v1"},
                     {"model_identifier", "cocoon-simulator@v1:dev-fixture"},
+                    {"api_model", "cocoon-simulator"},
                     {"model_verity_root", nullptr},
                     {"model_verification", "compiled-dev-fixture"},
                     {"model_architecture", "simulator"},
@@ -142,6 +143,14 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
                     {"prefix_cache_policy", "disabled"},
                     {"capabilities", {"text-json", "text-sse", "usage", "cancel-by-disconnect"}},
                     {"validated_backend_options", Json::object()},
+                    {"gate",
+                     {{"version", 1},
+                      {"body_bytes", profile.gate_body_bytes},
+                      {"output_bytes", profile.gate_output_bytes},
+                      {"timeout_ms", profile.gate_timeout_ms},
+                      {"max_connections", 16},
+                      {"chunk_bytes", 16384},
+                      {"api", {"/v1/models", "/v1/chat/completions", "/v1/completions"}}}},
                     {"lifecycle",
                      {{"startup_ms", profile.startup_ms},
                       {"warmup_ms", profile.warmup_ms},
@@ -186,6 +195,13 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
                             {"backend_uid", 65534},
                             {"firewall_policy", "roster-only-v1"}};
   }
+  int gate_port = 0;
+  if (runtime.contains("gate")) {
+    require_fields(runtime.at("gate"), {"listen_port"}, "gate");
+    gate_port = integer(runtime.at("gate"), "listen_port", 0, 1024, 65535);
+    if (!group || rank != 0 || gate_port == 0)
+      throw std::runtime_error("gate requires a grouped head and an explicit loopback port");
+  }
   return {profile,
           effective,
           config_digest(effective),
@@ -195,7 +211,9 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
           integer(sim, "startup_delay_ms", 0, 0, 30000),
           integer(sim, "warmup_delay_ms", 0, 0, 30000),
           group,
-          network};
+          network,
+          gate_port,
+          integer(sim, "token_delay_ms", 10, 0, 1000)};
 }
 
 Json read_config(const std::string &path) {

@@ -23,7 +23,7 @@ class SimulatorAdapter final : public BackendAdapter {
              "--config-digest",
              config.digest,
              "--model",
-             config.effective.at("model_identifier").get<std::string>(),
+             config.effective.at("api_model").get<std::string>(),
              "--max-model-len",
              std::to_string(config.effective.at("max_model_len").get<int>()),
              "--max-num-seqs",
@@ -35,7 +35,9 @@ class SimulatorAdapter final : public BackendAdapter {
              "--startup-delay-ms",
              std::to_string(config.startup_delay_ms),
              "--warmup-delay-ms",
-             std::to_string(config.warmup_delay_ms)},
+             std::to_string(config.warmup_delay_ms),
+             "--token-delay-ms",
+             std::to_string(config.token_delay_ms)},
             {"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"},
             run_dir + "/backend.log",
             socket,
@@ -46,7 +48,7 @@ class SimulatorAdapter final : public BackendAdapter {
   }
   ProbeRequest warmup(const Config &config) const override {
     return {"POST", "/v1/chat/completions",
-            Json({{"model", config.effective.at("model_identifier")},
+            Json({{"model", config.effective.at("api_model")},
                   {"messages", {{{"role", "user"}, {"content", "pipeline warmup"}}}},
                   {"max_tokens", 2},
                   {"stream", false}})
@@ -57,7 +59,7 @@ class SimulatorAdapter final : public BackendAdapter {
            body.at("security_mode") == "dev";
   }
   bool valid_warmup(const Config &config, const Json &body) const override {
-    return body.at("model") == config.effective.at("model_identifier") && body.at("choices").size() == 1 &&
+    return body.at("model") == config.effective.at("api_model") && body.at("choices").size() == 1 &&
            body.at("choices").at(0).at("message").at("content") == "simulated reply" &&
            body.at("choices").at(0).at("finish_reason") == "stop" && body.at("usage").at("completion_tokens") == 2;
   }

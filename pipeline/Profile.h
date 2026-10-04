@@ -25,6 +25,9 @@ struct Profile {
   int formation_ms = 4000;
   int restart_ms = 500;
   int max_restarts = 2;
+  int gate_body_bytes = 8192;
+  int gate_output_bytes = 1048576;
+  int gate_timeout_ms = 120000;
   bool wireguard = false;
 };
 
@@ -52,6 +55,8 @@ struct Config {
   int warmup_delay_ms;
   std::optional<GroupConfig> group;
   std::optional<NetworkConfig> network;
+  int gate_port = 0;
+  int token_delay_ms = 10;
 };
 
 void validate_profile(const Profile &profile, SecurityMode build_policy);

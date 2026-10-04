@@ -28,7 +28,10 @@ class Group : public std::enable_shared_from_this<Group> {
     return failure_;
   }
   bool ready() const {
-    return ready_ && !stopping_;
+    return ready_ && !stopping_ && leased_ && Clock::now() < lease_deadline_;
+  }
+  const std::string &epoch() const {
+    return epoch_;
   }
   Json status() const;
 

@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = 'cocoon-simulator@v1:dev-fixture'
+MODEL = 'cocoon-simulator'
 BIN = None
 RESULTS = None
 

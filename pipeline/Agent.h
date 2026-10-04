@@ -2,6 +2,7 @@
 
 #include "pipeline/HttpProbe.h"
 #include "pipeline/Group.h"
+#include "pipeline/Gate.h"
 #include "td/actor/actor.h"
 #include <atomic>
 #include <csignal>
@@ -37,6 +38,7 @@ class Agent final : public td::actor::Actor {
   void poll_control(Time now);
   void close_control();
   bool probe_valid(bool warmup) const;
+  GateState gate_state() const;
 
   Config config_;
   std::string run_dir_;
@@ -64,5 +66,6 @@ class Agent final : public td::actor::Actor {
   std::string last_group_status_;
   std::optional<Identity> identity_;
   std::shared_ptr<Group> group_;
+  std::shared_ptr<Gate> gate_;
 };
 }  // namespace cocoon::pipeline

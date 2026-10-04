@@ -2,7 +2,7 @@
 # simulator profiles in the production executable.
 if(UNIX)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
-  add_library(pipeline_core STATIC Profile.cpp Backend.cpp Process.cpp HttpProbe.cpp Agent.cpp Security.cpp Protocol.cpp Channel.cpp Group.cpp Network.cpp)
+  add_library(pipeline_core STATIC Profile.cpp Backend.cpp Process.cpp HttpProbe.cpp Agent.cpp Security.cpp Protocol.cpp Channel.cpp Group.cpp Network.cpp Gate.cpp)
   target_include_directories(pipeline_core PUBLIC ${PROJECT_SOURCE_DIR})
   target_link_libraries(pipeline_core PUBLIC tdactor tdutils nlohmann_json::nlohmann_json Boost::headers)
   target_link_libraries(pipeline_core PUBLIC cocoon tdnet_ported ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})

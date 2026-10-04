@@ -28,6 +28,26 @@ int main() {
     auto a = validate_config(head, SecurityMode::Dev);
     Json member = {{"role", "member"}, {"rank", 1}, {"profile", "simulator-dev-pp2-v1"}};
     auto b = validate_config(member, SecurityMode::Dev);
+    auto grouped_head = head;
+    grouped_head["group"] = {{"peer_port", 12310}};
+    auto gated = grouped_head;
+    gated["gate"] = {{"listen_port", 18080}};
+    require(validate_config(gated, SecurityMode::Dev).digest == validate_config(grouped_head, SecurityMode::Dev).digest,
+            "local gate endpoint changed common group identity");
+    auto bad_gate = head;
+    bad_gate["gate"] = {{"listen_port", 18080}};
+    rejects([&] { validate_config(bad_gate, SecurityMode::Dev); });
+    bad_gate = member;
+    bad_gate["group"] = {{"listen_port", 12310}};
+    bad_gate["gate"] = {{"listen_port", 18080}};
+    rejects([&] { validate_config(bad_gate, SecurityMode::Dev); });
+    for (const Json &gate : {Json::object(), Json{{"listen_port", 80}}, Json{{"listen_port", true}},
+                             Json{{"listen_port", 18080}, {"listen_host", "0.0.0.0"}},
+                             Json{{"listen_port", 18080}, {"backend", "/untrusted.sock"}}}) {
+      bad_gate = grouped_head;
+      bad_gate["gate"] = gate;
+      rejects([&] { validate_config(bad_gate, SecurityMode::Dev); });
+    }
     require(a.digest == b.digest && a.digest.size() == 64, "rank-specific fields changed config digest");
     auto explicit_defaults = head;
     explicit_defaults["limits"] = {{"max_model_len", 512}, {"max_num_seqs", 2}, {"max_num_batched_tokens", 512}};

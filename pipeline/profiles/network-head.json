@@ -2,6 +2,14 @@
   "profile": "simulator-dev-pp2-wg-v1",
   "rank": 0,
   "role": "head",
-  "group": {"peer_port": 12310},
-  "network": {"underlay_ip": "198.18.0.1", "peer_ip": "198.18.0.2"}
+  "group": {
+    "peer_port": 12310
+  },
+  "network": {
+    "underlay_ip": "198.18.0.1",
+    "peer_ip": "198.18.0.2"
+  },
+  "gate": {
+    "listen_port": 18080
+  }
 }
