@@ -27,6 +27,8 @@ Agent::Agent(Config config, std::string run_dir, int *exit_code)
 }
 
 Agent::~Agent() {
+  if (group_)
+    group_->close();
   close_control();
 }
 
@@ -62,18 +64,25 @@ void Agent::close_control() {
 }
 
 Json Agent::status() const {
-  return {{"state", state_},
+  auto group_status = group_ ? group_->status() : Json(nullptr);
+  const bool group_state = group_ && !stopping_ && !finished_ && state_ != "BACKOFF";
+  return {{"state", group_state ? group_status.at("state") : Json(state_)},
+          {"local_state", state_},
           {"security_mode", config_.profile.security_mode == SecurityMode::Dev ? "dev" : "production"},
           {"hardware_attested", false},
           {"local_ready", state_ == "LOCAL_READY"},
-          {"group_ready", false},
-          {"epoch", nullptr},
+          {"group_ready", group_ && group_->ready() && !stopping_ && !finished_},
+          {"epoch", group_ ? group_status.at("epoch") : Json(nullptr)},
+          {"group", group_status},
+          {"boot_id", boot_id_},
+          {"attempt", attempt_},
+          {"last_failure", last_failure_},
           {"rank", config_.rank},
           {"role", config_.role},
           {"profile", config_.profile.id},
           {"config_digest", config_.digest},
           {"failure", failure_.empty() ? Json(nullptr) : Json(failure_)},
-          {"process", process_.status()},
+          {"process", process_->status()},
           {"backend_socket", plan_.api_socket},
           {"health_socket", plan_.health_socket}};
 }
@@ -99,16 +108,38 @@ void Agent::start_up() {
   try {
     open_control();
     adapter_ = make_adapter(config_);
-    plan_ = adapter_->build_launch_plan(config_, run_dir_);
-    deadline_ = Clock::now() + std::chrono::milliseconds(config_.profile.startup_ms);
-    next_probe_ = Clock::now();
-    transition("STARTING");
-    process_.start(plan_);
-    publish();
+    if (config_.group) {
+      boot_id_ = random_id();
+      identity_ = make_identity(config_.group->certificate_base);
+      form_group();
+    } else
+      start_backend();
   } catch (const std::exception &error) {
     begin_stop(error.what());
   }
   alarm_timestamp() = td::Timestamp::in(0.02);
+}
+
+void Agent::form_group() {
+  group_ = std::make_shared<Group>(config_, io_, *identity_, boot_id_);
+  group_->start();
+  transition("FORMING");
+}
+
+void Agent::start_backend() {
+  auto directory = run_dir_;
+  if (config_.group) {
+    directory += "/e" + std::to_string(attempt_);
+    if (mkdir(directory.c_str(), 0700) < 0)
+      throw std::runtime_error("cannot create epoch runtime directory");
+  }
+  plan_ = adapter_->build_launch_plan(config_, directory);
+  deadline_ = Clock::now() + std::chrono::milliseconds(config_.profile.startup_ms);
+  next_probe_ = Clock::now();
+  transition("STARTING");
+  process_->start(plan_);
+  backend_started_ = true;
+  publish();
 }
 
 void Agent::begin_stop(const std::string &reason) {
@@ -120,13 +151,15 @@ void Agent::begin_stop(const std::string &reason) {
     return;
   }
   stopping_ = true;
+  if (group_)
+    group_->stop(reason);
   if (probe_) {
     probe_->cancel();
     probe_.reset();
   }
   state_ = "STOPPING";
   try {
-    process_.stop(Clock::now(), config_.profile.stop_ms, config_.profile.kill_ms);
+    process_->stop(Clock::now(), config_.profile.stop_ms, config_.profile.kill_ms);
     publish();
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
@@ -138,7 +171,9 @@ void Agent::begin_stop(const std::string &reason) {
 }
 
 void Agent::finish_stop() {
-  if (process_.cleanup_failed()) {
+  if (group_)
+    group_->close();
+  if (process_->cleanup_failed()) {
     failure_ += (failure_.empty() ? "" : "; ") + std::string("backend cleanup deadline exceeded");
     *exit_code_ = 1;
   } else {
@@ -147,6 +182,14 @@ void Agent::finish_stop() {
         unlink(path.c_str());
       }
     }
+  }
+  if (config_.group && !shutdown_ && !failure_.empty() && !process_->cleanup_failed() &&
+      attempt_ < config_.profile.max_restarts && identity_) {
+    last_failure_ = failure_;
+    restart_at_ = Clock::now() + std::chrono::milliseconds(config_.profile.restart_ms);
+    transition("BACKOFF");
+    stopping_ = false;
+    return;
   }
   finished_ = true;
   state_ = failure_.empty() ? "STOPPED" : "FAILED";
@@ -211,6 +254,7 @@ void Agent::poll_control(Time now) {
               throw std::runtime_error("expected status or stop operation");
             }
             if (cmd["op"] == "stop") {
+              shutdown_ = true;
               begin_stop("");
             }
             reply = status();
@@ -242,23 +286,58 @@ void Agent::poll_control(Time now) {
 }
 
 void Agent::tick() {
-  const auto now = Clock::now();
   io_.restart();
-  io_.poll();
+  // Bound network work so a busy authenticated peer cannot starve watchdogs.
+  for (int work = 0; work < 64 && io_.poll_one() != 0; ++work) {
+  }
+  const auto now = Clock::now();
   if (stop_requested.load(std::memory_order_relaxed)) {
+    shutdown_ = true;
     begin_stop("");
+  }
+  if (group_ && !stopping_ && state_ != "BACKOFF") {
+    group_->tick(state_ == "LOCAL_READY");
+    if (group_->stopped()) {
+      if (group_->failure().empty())
+        shutdown_ = true;
+      begin_stop(group_->failure());
+    } else if (group_->take_start())
+      start_backend();
+    auto snapshot = group_->status().dump();
+    if (snapshot != last_group_status_) {
+      last_group_status_ = snapshot;
+      publish();
+    }
   }
   if (listener_ >= 0) {
     poll_control(now);
   }
   if (stopping_) {
-    if (process_.tick_stop(now)) {
+    if (process_->tick_stop(now)) {
       finish_stop();
     }
     return;
   }
-  process_.inspect();
-  if (process_.exited()) {
+  if (state_ == "BACKOFF") {
+    if (now >= restart_at_) {
+      ++attempt_;
+      group_.reset();
+      process_ = std::make_unique<Process>();
+      plan_ = {};
+      backend_started_ = false;
+      failure_.clear();
+      *exit_code_ = 0;
+      // Certificates may change only between epochs, after confirmed cleanup.
+      // Dev defaults issue a fresh identity; explicit fixtures are reloaded.
+      identity_ = make_identity(config_.group->certificate_base);
+      form_group();
+    }
+    return;
+  }
+  if (!backend_started_)
+    return;
+  process_->inspect();
+  if (process_->exited()) {
     begin_stop("backend exited unexpectedly");
     return;
   }

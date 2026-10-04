@@ -39,6 +39,10 @@ def alive(pid, group=False):
         return True
     except ProcessLookupError:
         return False
+    except PermissionError:
+        # On macOS a just-exited, not-yet-reaped process group may return EPERM.
+        # It still exists; let the caller wait for supervisor cleanup.
+        return True
 
 
 class UnixHTTP(http.client.HTTPConnection):

@@ -1,0 +1,6 @@
+{
+  "profile": "simulator-dev-pp2-v1",
+  "rank": 1,
+  "role": "member",
+  "group": {"listen_port": 12310}
+}

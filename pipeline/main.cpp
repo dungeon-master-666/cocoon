@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
       const std::string arg = argv[i];
       if (arg == "--help") {
         std::cout << "pipeline-agent --config FILE [--check-config | --run-dir NEW_DIRECTORY]\n"
-                     "Local supervisor only; group readiness requires membership and networking.\n"
+                     "Dev local supervisor and mutual-TLS membership; networking is simulated.\n"
                   << "Build policy: " << (policy == SecurityMode::Dev ? "dev" : "production") << '\n';
         return 0;
       } else if (arg == "--check-config") {
@@ -50,7 +50,9 @@ int main(int argc, char **argv) {
     // No existing runtime directory is reused or removed, including after a crash.
     // Validate before creating files or launching any backend.
     run_dir = std::filesystem::absolute(run_dir).lexically_normal().string();
-    if (run_dir.size() + std::string("/control.sock").size() >= 104) {
+    auto socket_suffix = config.group ? "/e" + std::to_string(config.profile.max_restarts) + "/backend.sock"
+                                      : std::string("/control.sock");
+    if (run_dir.size() + socket_suffix.size() >= 104) {
       throw std::runtime_error("run directory path is too long for portable Unix sockets");
     }
     umask(0077);

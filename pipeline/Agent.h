@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pipeline/HttpProbe.h"
+#include "pipeline/Group.h"
 #include "td/actor/actor.h"
 #include <atomic>
 #include <csignal>
@@ -23,6 +24,8 @@ class Agent final : public td::actor::Actor {
     size_t sent = 0;
   };
   void start_up() override;
+  void start_backend();
+  void form_group();
   void alarm() override;
   void tick();
   void begin_stop(const std::string &reason);
@@ -40,7 +43,7 @@ class Agent final : public td::actor::Actor {
   int *exit_code_;
   std::unique_ptr<BackendAdapter> adapter_;
   LaunchPlan plan_;
-  Process process_;
+  std::unique_ptr<Process> process_ = std::make_unique<Process>();
   boost::asio::io_context io_;
   std::shared_ptr<HttpProbe> probe_;
   std::string state_ = "BOOTING";
@@ -52,5 +55,14 @@ class Agent final : public td::actor::Actor {
   std::vector<Client> clients_;
   bool stopping_ = false;
   bool finished_ = false;
+  bool shutdown_ = false;
+  bool backend_started_ = false;
+  int attempt_ = 0;
+  Time restart_at_;
+  std::string boot_id_;
+  std::string last_failure_;
+  std::string last_group_status_;
+  std::optional<Identity> identity_;
+  std::shared_ptr<Group> group_;
 };
 }  // namespace cocoon::pipeline

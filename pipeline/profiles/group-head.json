@@ -1,0 +1,6 @@
+{
+  "profile": "simulator-dev-pp2-v1",
+  "rank": 0,
+  "role": "head",
+  "group": {"peer_port": 12310}
+}

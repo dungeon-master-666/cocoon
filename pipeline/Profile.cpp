@@ -6,8 +6,7 @@
 #include <stdexcept>
 
 namespace cocoon::pipeline {
-namespace {
-void fields(const Json &value, std::initializer_list<const char *> allowed, const char *where) {
+void require_fields(const Json &value, std::initializer_list<const char *> allowed, const char *where) {
   if (!value.is_object()) {
     throw std::runtime_error(std::string(where) + " must be an object");
   }
@@ -19,6 +18,7 @@ void fields(const Json &value, std::initializer_list<const char *> allowed, cons
   }
 }
 
+namespace {
 int integer(const Json &obj, const char *key, int fallback, int low, int high) {
   if (!obj.contains(key)) {
     return fallback;
@@ -59,7 +59,7 @@ std::string config_digest(const Json &effective) {
 }
 
 Config validate_config(const Json &runtime, SecurityMode build_policy) {
-  fields(runtime, {"profile", "rank", "role", "limits", "simulator"}, "runtime");
+  require_fields(runtime, {"profile", "rank", "role", "limits", "simulator", "group"}, "runtime");
   const auto id = runtime.at("profile").get<std::string>();
   // Trusted catalogue, compiled into the measured executable. Runtime selects
   // an entry; it cannot supply commands, images, policy or environment variables.
@@ -77,12 +77,12 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
     throw std::runtime_error("role does not match rank");
   }
   const auto limits = runtime.value("limits", Json::object());
-  fields(limits, {"max_model_len", "max_num_seqs", "max_num_batched_tokens"}, "limits");
+  require_fields(limits, {"max_model_len", "max_num_seqs", "max_num_batched_tokens"}, "limits");
   int context = integer(limits, "max_model_len", 512, 16, 512);
   int seqs = integer(limits, "max_num_seqs", 2, 1, 2);
   int batch = integer(limits, "max_num_batched_tokens", 512, context, 512);
   const auto sim = runtime.value("simulator", Json::object());
-  fields(sim, {"scenario", "startup_delay_ms", "warmup_delay_ms"}, "simulator");
+  require_fields(sim, {"scenario", "startup_delay_ms", "warmup_delay_ms"}, "simulator");
   const auto scenario = sim.value("scenario", std::string("normal"));
   const std::set<std::string> scenarios{"normal",      "startup-exit", "startup-hang",      "warmup-error",
                                         "warmup-hang", "health-hang",  "crash-after-ready", "stubborn-child"};
@@ -125,6 +125,28 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
                       {"watchdog_ms", profile.watchdog_ms},
                       {"stop_ms", profile.stop_ms},
                       {"kill_ms", profile.kill_ms}}}};
+  std::optional<GroupConfig> group;
+  if (runtime.contains("group")) {
+    const auto &g = runtime.at("group");
+    require_fields(g, {"listen_host", "listen_port", "peer_host", "peer_port", "certificate_base"}, "group");
+    group = GroupConfig{g.value("listen_host", std::string("127.0.0.1")), integer(g, "listen_port", 0, 1024, 65535),
+                        g.value("peer_host", std::string("127.0.0.1")), integer(g, "peer_port", 0, 1024, 65535),
+                        g.value("certificate_base", std::string())};
+    if (group->listen_host != "127.0.0.1" || group->peer_host != "127.0.0.1" ||
+        (rank == 0 && (group->peer_port == 0 || group->listen_port != 0)) ||
+        (rank == 1 && (group->listen_port == 0 || group->peer_port != 0))) {
+      throw std::runtime_error("dev group requires loopback and head peer_port / member listen_port");
+    }
+    effective["membership"] = {{"version", 1},
+                               {"policy", "dev-ratls-v1"},
+                               {"heartbeat_ms", profile.heartbeat_ms},
+                               {"lease_ms", profile.lease_ms},
+                               {"formation_ms", profile.formation_ms},
+                               {"restart_ms", profile.restart_ms},
+                               {"max_restarts", profile.max_restarts},
+                               {"network_setup", "simulated"}};
+    effective["security_policy_version"] = "dev-ratls-v1";
+  }
   return {profile,
           effective,
           config_digest(effective),
@@ -132,7 +154,8 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
           role,
           scenario,
           integer(sim, "startup_delay_ms", 0, 0, 30000),
-          integer(sim, "warmup_delay_ms", 0, 0, 30000)};
+          integer(sim, "warmup_delay_ms", 0, 0, 30000),
+          group};
 }
 
 Json read_config(const std::string &path) {
@@ -146,7 +169,14 @@ Json read_config(const std::string &path) {
   if (text.size() > 65536) {
     throw std::runtime_error("config exceeds 64 KiB");
   }
-  // Duplicate keys are rejected rather than silently choosing the last value.
+  return parse_json(text);
+}
+
+Json parse_json(const std::string &text) {
+  if (text.size() > 65536) {
+    throw std::runtime_error("JSON exceeds 64 KiB");
+  }
+  // The same strict parser is used for files and authenticated control frames.
   std::vector<std::set<std::string>> keys;
   return Json::parse(text, [&](int depth, Json::parse_event_t event, Json &value) {
     if (depth > 16) {
