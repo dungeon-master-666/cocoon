@@ -5,7 +5,7 @@ if(UNIX)
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/sglang-models.json")
   file(READ "${CMAKE_CURRENT_SOURCE_DIR}/sglang-models.json" SGLANG_MODELS)
   configure_file(sglang-models.h.in sglang-models.h @ONLY)
-  add_library(pipeline_core STATIC Profile.cpp Backend.cpp Sglang.cpp Process.cpp HttpProbe.cpp Agent.cpp Security.cpp Protocol.cpp Channel.cpp Group.cpp Network.cpp Gate.cpp)
+  add_library(pipeline_core STATIC Profile.cpp Backend.cpp Sglang.cpp Vllm.cpp Process.cpp HttpProbe.cpp Agent.cpp Security.cpp Protocol.cpp Channel.cpp Group.cpp Network.cpp Gate.cpp)
   target_include_directories(pipeline_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
   target_include_directories(pipeline_core PUBLIC ${PROJECT_SOURCE_DIR})
   target_link_libraries(pipeline_core PUBLIC tdactor tdutils nlohmann_json::nlohmann_json Boost::headers)
@@ -14,6 +14,8 @@ if(UNIX)
   target_compile_definitions(pipeline_core PRIVATE
     PIPELINE_PYTHON="${Python3_EXECUTABLE}"
     PIPELINE_SIMULATOR="${CMAKE_CURRENT_SOURCE_DIR}/simulator.py"
+    PIPELINE_HELPER_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    PIPELINE_VLLM_HELPER="${CMAKE_CURRENT_SOURCE_DIR}/vllm-helper.py"
     PIPELINE_SGLANG_HELPER="${CMAKE_CURRENT_SOURCE_DIR}/sglang-helper.py"
     PIPELINE_NETWORK_HELPER="${CMAKE_CURRENT_SOURCE_DIR}/network-helper.py")
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -31,6 +33,8 @@ if(UNIX)
   target_link_libraries(test-pipeline-profile PRIVATE pipeline_core)
   add_executable(test-pipeline-sglang EXCLUDE_FROM_ALL ../test/test-pipeline-sglang.cpp)
   target_link_libraries(test-pipeline-sglang PRIVATE pipeline_core)
+  add_executable(test-pipeline-vllm EXCLUDE_FROM_ALL ../test/test-pipeline-vllm.cpp)
+  target_link_libraries(test-pipeline-vllm PRIVATE pipeline_core)
   add_executable(pipeline-dev-cert EXCLUDE_FROM_ALL dev-cert.cpp)
   target_link_libraries(pipeline-dev-cert PRIVATE pipeline_core)
   add_executable(test-pipeline-membership EXCLUDE_FROM_ALL ../test/test-pipeline-membership.cpp)

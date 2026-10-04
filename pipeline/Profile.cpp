@@ -1,5 +1,6 @@
 #include "pipeline/Profile.h"
 #include "pipeline/Sglang.h"
+#include "pipeline/Vllm.h"
 
 #include "td/utils/crypto.h"
 #include <fstream>
@@ -41,7 +42,8 @@ void validate_profile(const Profile &profile, SecurityMode build_policy) {
     throw std::runtime_error("profile security policy does not match this executable");
   }
   if (profile.backend != "simulator" &&
-      !(profile.backend == "sglang" && is_sglang_profile(profile.id) && profile.wireguard &&
+      !(((profile.backend == "sglang" && is_sglang_profile(profile.id)) ||
+        (profile.backend == "vllm" && is_vllm_profile(profile.id))) && profile.wireguard &&
         profile.security_mode == SecurityMode::Dev)) {
     throw std::runtime_error("backend adapter is not implemented; no fallback is allowed");
   }
@@ -68,7 +70,9 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
   // Trusted catalogue, compiled into the measured executable. Runtime selects
   // an entry; it cannot supply commands, images, policy or environment variables.
   const bool sglang = is_sglang_profile(id);
-  if (id != "simulator-dev-pp2-v1" && id != "simulator-dev-pp2-wg-v1" && !sglang) {
+  const bool vllm = is_vllm_profile(id);
+  const bool gpu = sglang || vllm;
+  if (id != "simulator-dev-pp2-v1" && id != "simulator-dev-pp2-wg-v1" && !gpu) {
     throw std::runtime_error("unknown or unsupported profile: " + id);
   }
   Profile profile{id, SecurityMode::Dev, "simulator", 2};
@@ -80,6 +84,8 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
   }
   if (sglang)
     configure_sglang_profile(profile);
+  if (vllm)
+    configure_vllm_profile(profile);
   validate_profile(profile, build_policy);
   std::optional<NetworkConfig> network;
   if (profile.wireguard) {
@@ -109,11 +115,11 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
   }
   const auto limits = runtime.value("limits", Json::object());
   require_fields(limits, {"max_model_len", "max_num_seqs", "max_num_batched_tokens"}, "limits");
-  int context = integer(limits, "max_model_len", sglang ? 4096 : 512, sglang ? 512 : 16, sglang ? 4096 : 512);
-  int seqs = integer(limits, "max_num_seqs", sglang ? 1 : 2, 1, sglang ? 1 : 2);
-  int batch = integer(limits, "max_num_batched_tokens", sglang ? 4096 : 512, context, sglang ? 4096 : 512);
-  if (sglang && runtime.contains("simulator"))
-    throw std::runtime_error("simulator options are forbidden for SGLang");
+  int context = integer(limits, "max_model_len", gpu ? 4096 : 512, gpu ? 512 : 16, gpu ? 4096 : 512);
+  int seqs = integer(limits, "max_num_seqs", gpu ? 1 : 2, 1, gpu ? 1 : 2);
+  int batch = integer(limits, "max_num_batched_tokens", gpu ? 4096 : 512, context, gpu ? 4096 : 512);
+  if (gpu && runtime.contains("simulator"))
+    throw std::runtime_error("simulator options are forbidden for GPU backends");
   const auto sim = runtime.value("simulator", Json::object());
   require_fields(sim, {"scenario", "startup_delay_ms", "warmup_delay_ms", "token_delay_ms"}, "simulator");
   const auto scenario = sim.value("scenario", std::string("normal"));
@@ -169,6 +175,8 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
                       {"kill_ms", profile.kill_ms}}}};
   if (sglang)
     configure_sglang_effective(effective);
+  if (vllm)
+    configure_vllm_effective(effective);
   std::optional<GroupConfig> group;
   if (runtime.contains("group")) {
     const auto &g = runtime.at("group");

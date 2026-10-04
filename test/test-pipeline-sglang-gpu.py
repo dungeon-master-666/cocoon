@@ -19,7 +19,10 @@ REMOTE = '/home/ruslixag/cocoon-step10'
 
 
 class Lab:
-    def __init__(self, output):
+    def __init__(self, output, backend="sglang"):
+        self.backend = backend
+        self.remote_dir = REMOTE if backend == "sglang" else "/home/ruslixag/cocoon-step11"
+        self.image = "cocoon-step10-dev" if backend == "sglang" else "cocoon-step11-dev"
         self.lab = json.loads((ROOT/'experiments/gpu-pipeline/lab.json').read_text())
         self.key = str(Path(self.lab['ssh_key']).expanduser())
         self.output = output
@@ -38,51 +41,52 @@ class Lab:
         with ThreadPoolExecutor(2) as pool: return list(pool.map(fn, range(2)))
 
     def remote(self, host_rank, run, action, timeout=60, **fields):
-        return json.loads(self.ssh(host_rank, ['sudo','-n','python3',REMOTE+'/src/test/sglang-gpu/host.py'],
-            json.dumps({'run':run,'action':action,**fields}),timeout))
+        return json.loads(self.ssh(host_rank, ['sudo','-n','python3',self.remote_dir+'/src/test/sglang-gpu/host.py'],
+            json.dumps({'run':run,'action':action,'backend':self.backend,**fields}),timeout))
 
     def upload(self):
         files = subprocess.check_output(['git','ls-files','--recurse-submodules','-z'],cwd=ROOT).decode().split('\0')
         files = {p for p in files if p and not any(x.startswith('.') for x in Path(p).parts) and (ROOT/p).is_file()}
-        for pattern in ('pipeline/Sglang.*','pipeline/sglang-*','pipeline/profiles/sglang-*.json','test/test-pipeline-sglang*','test/sglang-gpu/*'):
+        for pattern in ('pipeline/Sglang.*','pipeline/sglang-*','pipeline/profiles/sglang-*.json','pipeline/profiles/vllm-*.json','test/test-pipeline-sglang*','test/sglang-gpu/*','pipeline/Vllm.*','pipeline/vllm*','pipeline/engine-helper.py','test/test-pipeline-vllm*'):
             files.update(str(p.relative_to(ROOT)) for p in ROOT.glob(pattern) if p.is_file())
         manifest = self.output/'transfer-files.txt'; manifest.write_text('\n'.join(sorted(files))+'\n')
         def one(rank):
             actual = self.ssh(rank,['hostname']).strip()
             if actual != self.lab['hosts'][rank]['hostname']: raise ValueError('host identity mismatch')
-            self.ssh(rank,['mkdir','-p',REMOTE+'/src',REMOTE+'/build'])
+            self.ssh(rank,['mkdir','-p',self.remote_dir+'/src',self.remote_dir+'/build'])
             subprocess.run(['rsync','-az','--files-from='+str(manifest),'-e','ssh -i '+shlex.quote(self.key)+' -o BatchMode=yes',
-                str(ROOT)+'/',self.lab['hosts'][rank]['ssh']+':'+REMOTE+'/src/'],check=True)
+                str(ROOT)+'/',self.lab['hosts'][rank]['ssh']+':'+self.remote_dir+'/src/'],check=True)
         self.both(one)
 
     def prepare(self):
         print('Uploading explicit source list',flush=True)
         self.upload()
         def image(rank):
-            output = self.ssh(rank,['sudo','-n','docker','build','-t','cocoon-step10-dev',REMOTE+'/src/test/sglang-gpu'],timeout=1800)
+            output = self.ssh(rank,['sudo','-n','docker','build','-t',self.image,'--build-arg','BASE='+json.loads((ROOT/'experiments/gpu-pipeline/profiles.json').read_text())['backends'][self.backend]['image'],self.remote_dir+'/src/test/sglang-gpu'],timeout=1800)
             (self.output/f'image-{rank}.log').write_text(output)
         self.both(image)
-        print('Building Cocoon in pinned SGLang runtime',flush=True)
+        print('Building Cocoon in pinned '+self.backend+' runtime',flush=True)
         script = ('cmake -S /work/cocoon -B /work/build -G Ninja -USECP256K1_LIBRARY -DCMAKE_BUILD_TYPE=Release '
                   '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ '
-                  '-DTON_ONLY_TONLIB=ON -DBUILD_TESTING=OFF -DCOCOON_ARCH=x86-64 -DTON_ARCH=x86-64 '
+                  '-DTON_ONLY_TONLIB=ON -DTON_USE_ROCKSDB=ON -DTDDB_USE_ROCKSDB=ON '
+                  '-DBUILD_TESTING=OFF -DCOCOON_ARCH=x86-64 -DTON_ARCH=x86-64 '
                   '&& cmake --build /work/build --target pipeline-agent-dev pipeline-backend-sandbox '
                   'client-runner proxy-runner worker-runner key-manager-runner '
-                  'cocoon-subst router encrypt-message test-pipeline-sglang test-pipeline-profile -j 6')
+                  'cocoon-subst router encrypt-message test-pipeline-sglang test-pipeline-vllm test-pipeline-profile -j 6')
         built = self.ssh(0,['sudo','-n','docker','run','--rm','--network','host',
-            '-v',REMOTE+'/src:/work/cocoon','-v',REMOTE+'/build:/work/build',
-            'cocoon-step10-dev','sh','-c',script],timeout=3600)
+            '-v',self.remote_dir+'/src:/work/cocoon','-v',self.remote_dir+'/build:/work/build',
+            self.image,'sh','-c',script],timeout=3600)
         (self.output/'build.log').write_text(built)
         print('Cocoon build complete',flush=True)
         # The member only needs the same agent/sandbox binaries; it never runs a worker.
         local = self.output/'binaries'; local.mkdir(exist_ok=True)
         for name in ('pipeline-agent-dev','pipeline-backend-sandbox'):
             data = subprocess.check_output(['ssh','-i',self.key,self.lab['hosts'][0]['ssh'],
-                shlex.join(['cat',REMOTE+'/build/pipeline/'+name])])
+                shlex.join(['cat',self.remote_dir+'/build/pipeline/'+name])])
             (local/name).write_bytes(data)
-        self.ssh(1,['mkdir','-p',REMOTE+'/build/pipeline'])
-        subprocess.run(['scp','-i',self.key,*map(str,local.iterdir()),self.lab['hosts'][1]['ssh']+':'+REMOTE+'/build/pipeline/'],check=True)
-        self.ssh(1,['chmod','755',REMOTE+'/build/pipeline/pipeline-agent-dev',REMOTE+'/build/pipeline/pipeline-backend-sandbox'])
+        self.ssh(1,['mkdir','-p',self.remote_dir+'/build/pipeline'])
+        subprocess.run(['scp','-i',self.key,*map(str,local.iterdir()),self.lab['hosts'][1]['ssh']+':'+self.remote_dir+'/build/pipeline/'],check=True)
+        self.ssh(1,['chmod','755',self.remote_dir+'/build/pipeline/pipeline-agent-dev',self.remote_dir+'/build/pipeline/pipeline-backend-sandbox'])
 
     def trial(self, model):
         run = secrets.token_hex(6)
@@ -146,25 +150,27 @@ class Lab:
             (out/'result.json').write_text(json.dumps(result,indent=2))
             for rank in created:
                 # Logs, status and fake-TON fixtures only; no host credentials.
-                copied = subprocess.run(['rsync','-az','-e','ssh -i '+shlex.quote(self.key),'--rsync-path=sudo -n rsync',
-                    self.lab['hosts'][rank]['ssh']+':'+REMOTE+'/runs/'+run+'/',str(out/f'rank-{rank}')+'/'])
+                copied = subprocess.run(['rsync','-az','--no-specials','--no-devices','-e','ssh -i '+shlex.quote(self.key),'--rsync-path=sudo -n rsync',
+                    self.lab['hosts'][rank]['ssh']+':'+self.remote_dir+'/runs/'+run+'/',str(out/f'rank-{rank}')+'/'])
                 if copied.returncode:
                     result['passed'] = False
                     result.setdefault('collection_errors',[]).append(rank)
             (out/'result.json').write_text(json.dumps(result,indent=2))
         if not result['passed']: raise AssertionError('GPU cleanup did not pass')
-        print('PASS GPU SGLang',model,'artifacts:',out,flush=True)
+        print('PASS GPU',self.backend,model,'artifacts:',out,flush=True)
         return result
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
+    p.add_argument('--backend', choices=['sglang','vllm'], default='sglang')
     p.add_argument('--prepare', action='store_true')
     p.add_argument('--upload-only', action='store_true')
     p.add_argument('--model', choices=['small','large','both'], default='both')
-    p.add_argument('--output-dir', type=Path, default=ROOT/'build/step10/gpu')
+    p.add_argument('--output-dir', type=Path, default=None)
     args = p.parse_args()
-    lab = Lab(args.output_dir.resolve())
+    output = args.output_dir or ROOT/('build/step10/gpu' if args.backend=='sglang' else 'build/step11/gpu')
+    lab = Lab(output.resolve(), args.backend)
     if args.upload_only: lab.upload()
     else:
         if args.prepare: lab.prepare()

@@ -1,5 +1,6 @@
 #include "pipeline/Backend.h"
 #include "pipeline/Sglang.h"
+#include "pipeline/Vllm.h"
 
 #include <stdexcept>
 
@@ -74,6 +75,8 @@ std::unique_ptr<BackendAdapter> make_adapter(const Config &config) {
   }
   if (config.profile.backend == "sglang")
     return make_sglang_adapter();
+  if (config.profile.backend == "vllm")
+    return make_vllm_adapter();
   throw std::runtime_error("unsupported backend adapter");
 }
 }  // namespace cocoon::pipeline

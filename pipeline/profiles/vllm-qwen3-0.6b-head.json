@@ -1,0 +1,15 @@
+{
+  "profile": "vllm-qwen3-0.6b-dev-pp2-wg-v1",
+  "rank": 0,
+  "role": "head",
+  "group": {
+    "peer_port": 12310
+  },
+  "network": {
+    "underlay_ip": "192.168.100.12",
+    "peer_ip": "192.168.100.13"
+  },
+  "gate": {
+    "listen_port": 18080
+  }
+}

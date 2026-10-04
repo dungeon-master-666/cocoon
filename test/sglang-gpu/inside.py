@@ -21,6 +21,9 @@ ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('worker_suite', ROOT / 'test/test-pipeline-worker.py')
 s9 = importlib.util.module_from_spec(spec); spec.loader.exec_module(s9)
 smoke, require, wait = s9.smoke, s9.require, s9.wait
+BACKEND = 'sglang'
+METRIC_NAMES = ('sglang:num_running_reqs','sglang:num_queue_reqs','sglang:num_used_tokens','sglang:token_usage')
+KV_USED = 'sglang:num_used_tokens'
 
 
 def save(path, value):
@@ -45,7 +48,7 @@ def metrics(head):
     text = subprocess.check_output(['ip', 'netns', 'exec', namespace, 'python3', '-c', code], text=True, timeout=5)
     values = {}
     for line in text.splitlines():
-        if line.startswith(('sglang:num_running_reqs{', 'sglang:num_queue_reqs{', 'sglang:num_used_tokens{', 'sglang:token_usage{')):
+        if line.startswith(tuple(name+'{' for name in METRIC_NAMES)):
             name = line.split('{')[0]
             values.setdefault(name, []).append(float(line.rsplit(' ', 1)[1]))
     return values
@@ -57,7 +60,7 @@ def idle(head, timeout=40):
     def check():
         h = health(head)
         m = metrics(head)
-        names = ('sglang:num_running_reqs', 'sglang:num_queue_reqs', 'sglang:num_used_tokens', 'sglang:token_usage')
+        names = METRIC_NAMES
         if h['active_requests'] == 0 and all(k in m and all(v == 0 for v in m[k]) for k in names):
             return {'helper': h, 'metrics': m}
     return wait(check, timeout)
@@ -107,6 +110,11 @@ def success(result, stream, completion):
 
 
 def run(args):
+    global BACKEND, METRIC_NAMES, KV_USED
+    BACKEND = args.backend
+    if BACKEND == 'vllm':
+        METRIC_NAMES = ('vllm:num_requests_running','vllm:num_requests_waiting','vllm:kv_cache_usage_perc')
+        KV_USED = 'vllm:kv_cache_usage_perc'
     output = args.output_dir
     output.mkdir(exist_ok=True, parents=True)
     head = s9.ExternalNode(args.head_run)
@@ -118,11 +126,11 @@ def run(args):
             status = head.status()
             require(status.get('state') != 'FAILED', 'agent failed: ' + str(status.get('failure')))
             return status.get('group_ready') and status.get('epoch') != previous_epoch
-        print('Waiting for SGLang PP warmup:', args.model, flush=True)
+        print('Waiting for '+BACKEND+' PP warmup:', args.model, flush=True)
         wait(ready, 1200)
         print('PASS full-model warmup', flush=True)
         initial = head.control('status')
-        require(initial['profile'].startswith('sglang-'), 'not the SGLang agent')
+        require(initial['profile'].startswith(BACKEND+'-'), 'wrong backend agent')
         require(initial['hardware_attested'] is False, 'dev accidentally claims attestation')
         offset, ports, _ = smoke.choose_ports()
         with smoke.Processes(output, grace=10) as processes:
@@ -170,11 +178,11 @@ def run(args):
             before_helper = health(head)
             import http.client
             conn = http.client.HTTPConnection('127.0.0.1', 18080, timeout=10)
-            body = payload(True, count=512); body.pop('timeout'); body['ignore_eos'] = True
+            body = payload(True, count=3000); body.pop('timeout'); body['ignore_eos'] = True
             conn.request('POST', '/v1/chat/completions', json.dumps(body), {s9.ID: 'gpu-disconnect', s9.TIMEOUT: '60', 'Content-Type': 'application/json'})
             response = conn.getresponse(); require(response.status == 200, 'direct stream failed')
             require(response.read1(1024), 'no direct streamed data')
-            active = wait(lambda: (m if any(v > 0 for v in m.get('sglang:num_used_tokens', [])) else None)
+            active = wait(lambda: (m if any(v > 0 for v in m.get(KV_USED, [])) else None)
                           if (m := metrics(head)) else None, 10)
             member_active = member_resources(output, 'active')
             response.close(); conn.close()
@@ -200,15 +208,20 @@ def run(args):
             old = head.control('status')
             before = smoke.statistics(ports)
             event = threading.Event()
-            body = payload(True, count=512, timeout=60)
+            # Leave enough generation for the remote fault controller's SSH
+            # round trip even on the small, fast model.
+            body = payload(True, count=3000, timeout=60)
             body['messages'][0]['content'] = 'Write a detailed story of at least 2000 words about a friendly robot exploring a new planet.'
             with concurrent.futures.ThreadPoolExecutor(1) as pool:
                 pending = pool.submit(s9.request, ports['client_http'], body=smoke.crypt(args, key, body),
                     on_part=lambda part: event.set() if b'data: ' in part else None)
                 require(event.wait(10), 'fault stream did not start')
+                require(not pending.done() and health(head)['active_requests'] == 1,
+                        'fault request must still be active before injecting member loss')
                 save(output / 'fault-request.json', {'op': 'kill-member-backend', 'epoch': old['epoch']})
                 result = pending.result(timeout=30)
             result = smoke.decrypt_response(args, key, result, True)
+            report['member_failure_response'] = result
             require(result['transport_error'] and '[DONE]' not in result['body'], 'member loss falsely succeeded')
             failed_accounting = s9.accounting(ports, before, False)
             def disabled():
@@ -237,6 +250,7 @@ def run(args):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
+    p.add_argument('--backend', choices=['sglang','vllm'], default='sglang')
     p.add_argument('--head-run', type=Path, required=True)
     p.add_argument('--output-dir', type=Path, required=True)
     p.add_argument('--model', required=True)

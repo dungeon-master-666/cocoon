@@ -30,10 +30,16 @@ def firewall():
 
 
 def main(req):
+    global BASE, IMAGE
+    backend = req.get('backend', 'sglang')
+    if backend not in ('sglang', 'vllm'): raise ValueError('backend')
+    step = '10' if backend == 'sglang' else '11'
+    BASE = Path('/home/ruslixag/cocoon-step' + step)
+    IMAGE = 'cocoon-step' + step + '-dev'
     run = req['run']
     if not re.fullmatch('[0-9a-f]{12}', run): raise ValueError('invalid run')
     root = BASE / 'runs' / run
-    name = 'cp10-' + run
+    name = 'cp' + step + '-' + run
     action = req['action']
     owner = root / 'owner.json'
     if action == 'create':
@@ -51,7 +57,7 @@ def main(req):
         # Duplicate-address detection precedes claiming a temporary LAN address.
         command(['docker', 'run', '--rm', '--network', 'host', '--entrypoint', 'arping', IMAGE,
                  '-D', '-I', 'enp4s0.4000', '-c', '3', addr])
-        command(['docker', 'run', '-d', '--name', name, '--label', 'cocoon.step10=' + run,
+        command(['docker', 'run', '-d', '--name', name, '--label', 'cocoon.step' + step + '=' + run,
                  '--gpus', 'device=0', '--network', 'none', '--pid', 'host',
                  '--cap-drop', 'ALL', '--cap-add', 'SYS_ADMIN', '--cap-add', 'SYS_PTRACE',
                  '--cap-add', 'NET_ADMIN', '--cap-add', 'NET_RAW',
@@ -64,7 +70,7 @@ def main(req):
                  '--mount', 'type=bind,src=' + str(root) + ',dst=/trial', IMAGE])
         info = json.loads(command(['docker', 'inspect', name]))[0]
         pid = info['State']['Pid']
-        link = 'p10' + run[:10]
+        link = 'p' + step + run[:10]
         state.update(container_pid=pid, image=info['Image'], link=link, underlay=addr)
         owner.write_text(json.dumps(state))
         command(['ip', 'link', 'add', 'link', 'enp4s0.4000', 'name', link, 'type', 'ipvlan', 'mode', 'l2'])
@@ -76,7 +82,7 @@ def main(req):
         kind = req['model']
         if kind not in ('small', 'large'): raise ValueError('model')
         model = '0.6b' if kind == 'small' else '14b'
-        cfg = {'profile': f'sglang-qwen3-{model}-dev-pp2-wg-v1', 'rank': rank, 'role': 'head' if rank == 0 else 'member',
+        cfg = {'profile': f'{backend}-qwen3-{model}-dev-pp2-wg-v1', 'rank': rank, 'role': 'head' if rank == 0 else 'member',
                'group': {'peer_port' if rank == 0 else 'listen_port': 12310}, 'network': {'underlay_ip': addr, 'peer_ip': peer}}
         if rank == 0: cfg['gate'] = {'listen_port': 18080}
         (root/'config.json').write_text(json.dumps(cfg))
@@ -96,9 +102,9 @@ def main(req):
         ns = current['group']['network']['namespace']
         wrapper = current['process']['pid']
         code = '''import importlib.metadata,json,torch
-print(json.dumps({'sglang':importlib.metadata.version('sglang'),'torch':torch.__version__,
+print(json.dumps({'backend':importlib.metadata.version('BACKEND'),'torch':torch.__version__,
                  'cuda':torch.version.cuda,'nccl':torch.cuda.nccl.version()}))'''
-        versions = json.loads(command(['docker','exec',name,'python3','-c',code]))
+        versions = json.loads(command(['docker','exec',name,'python3','-c',code.replace('BACKEND',backend)]))
         links = json.loads(command(['docker','exec',name,'ip','-j','-n',ns,'link']))
         if {link['ifname'] for link in links} != {'lo','wg0'}: raise AssertionError('unexpected engine interface')
         process = Path(f'/proc/{wrapper}/status').read_text()
@@ -127,7 +133,7 @@ print(json.dumps({'sglang':importlib.metadata.version('sglang'),'torch':torch.__
                 'member_recovery':recovered}
     if action == 'driver':
         model = 'Qwen/Qwen3-0.6B' if req['model'] == 'small' else 'Qwen/Qwen3-14B'
-        code = 'import subprocess; f=open("/trial/driver.log","w"); p=subprocess.Popen(["python3","/work/cocoon/test/sglang-gpu/inside.py","--head-run","/trial/agent","--output-dir","/trial/acceptance","--model",' + repr(model) + '],stdout=f,stderr=subprocess.STDOUT,start_new_session=True); print(p.pid)'
+        code = 'import subprocess; f=open("/trial/driver.log","w"); p=subprocess.Popen(["python3","/work/cocoon/test/sglang-gpu/inside.py","--head-run","/trial/agent","--output-dir","/trial/acceptance","--backend",' + repr(backend) + ',"--model",' + repr(model) + '],stdout=f,stderr=subprocess.STDOUT,start_new_session=True); print(p.pid)'
         pid = int(command(['docker','exec',name,'python3','-c',code]).strip())
         state['driver_pid'] = pid; owner.write_text(json.dumps(state))
         return {'driver_pid': pid}
@@ -144,6 +150,17 @@ print(json.dumps({'sglang':importlib.metadata.version('sglang'),'torch':torch.__
         except FileNotFoundError: result['driver_alive'] = False
         return result
     if action == 'resources':
+        if backend == 'vllm':
+            # vLLM PP uses one scheduler/block allocator on head; headless rank
+            # has no per-rank scheduler metrics. Verify its process/device here;
+            # the driver asserts shared running/waiting/cache gauges on head.
+            current = json.loads((root/'agent/status.json').read_text())
+            pid = current['process']['pid']
+            children = Path(f'/proc/{pid}/task/{pid}/children').read_text().split()
+            alive = any(b'vllm' in Path(f'/proc/{p}/cmdline').read_bytes() for p in children)
+            return {'passed': bool(current['group_ready'] and alive), 'phase':req['phase'],
+                    'metric_scope':'shared PP scheduler on head', 'launcher_alive':alive,
+                    'gpu': command(['nvidia-smi','--query-gpu=memory.used','--format=csv,noheader,nounits']).strip()}
         phase = req['phase']
         if phase not in ('active', 'idle'): raise ValueError('resource phase')
         current = json.loads((root/'agent/status.json').read_text())
@@ -175,17 +192,17 @@ print(json.dumps(m))'''
         current = json.loads((root/'agent/status.json').read_text())
         if not current['group_ready'] or current['epoch'] != req['epoch']: raise ValueError('stale fault request')
         wrapper = current['process']['pid']
-        # Kill SGLang's actual launcher, preserving our wrapper so it must notice
+        # Kill the engine's actual launcher, preserving our wrapper so it must notice
         # the exit and reap grandchildren. PID ownership is checked in /proc.
         children = Path(f'/proc/{wrapper}/task/{wrapper}/children').read_text().split()
-        targets = [int(p) for p in children if b'sglang.launch_server' in Path(f'/proc/{p}/cmdline').read_bytes()]
-        if len(targets) != 1: raise ValueError('cannot identify owned SGLang process')
-        old = {'status': current, 'wrapper_pid': wrapper, 'sglang_pid': targets[0]}
+        targets = [int(p) for p in children if (b'sglang.launch_server' if backend == 'sglang' else b'vllm') in Path(f'/proc/{p}/cmdline').read_bytes()]
+        if len(targets) != 1: raise ValueError('cannot identify owned engine process')
+        old = {'status': current, 'wrapper_pid': wrapper, 'backend_pid': targets[0]}
         (root/'fault.json').write_text(json.dumps(old))
         fd = os.pidfd_open(targets[0])
         try:
             parent = int(Path(f'/proc/{targets[0]}/stat').read_text().rsplit(')', 1)[1].split()[1])
-            if parent != wrapper: raise ValueError('SGLang process ownership changed')
+            if parent != wrapper: raise ValueError('engine process ownership changed')
             signal.pidfd_send_signal(fd, signal.SIGKILL)
         finally:
             os.close(fd)
@@ -194,7 +211,7 @@ print(json.dumps(m))'''
         result = {'passed': False}
         try:
             info = json.loads(command(['docker','inspect',name]))[0]
-            if info['Config']['Labels'].get('cocoon.step10') != run: raise ValueError('container label mismatch')
+            if info['Config']['Labels'].get('cocoon.step' + step) != run: raise ValueError('container label mismatch')
             code = 'import socket; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect("/trial/agent/control.sock"); s.sendall(b"{\\\"op\\\":\\\"stop\\\"}\\n"); print(s.recv(32768).decode())'
             try: command(['docker','exec',name,'python3','-c',code])
             except subprocess.CalledProcessError: pass
@@ -212,7 +229,7 @@ print(json.dumps(m))'''
         except subprocess.CalledProcessError:
             result['agent_cleanup'] = False
         # A failed create may have left only the un-moved test link.
-        link = state.get('link', 'p10' + run[:10])
+        link = state.get('link', 'p' + step + run[:10])
         probe = subprocess.run(['ip','link','show',link], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if probe.returncode == 0: command(['ip','link','del',link])
         for attempt in range(20):

@@ -17,7 +17,7 @@ import unittest
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('sglang_helper', ROOT / 'pipeline/sglang-helper.py')
+spec = importlib.util.spec_from_file_location('sglang_helper', ROOT / 'pipeline/engine-helper.py')
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 CONFIG = None
@@ -58,12 +58,12 @@ class Fixture:
             if path == '/health':
                 await helper.reply(writer, 200, {'fixture': True})
                 return
-            if path == '/abort_request':
+            if path in ('/abort_request', '/pipeline/abort'):
                 self.aborted.append(obj['rid'])
                 await helper.reply(writer, self.abort_status, {})
                 return
             self.requests.append((path, obj))
-            rid = obj['rid']
+            rid = obj.get('rid', obj.get('request_id'))
             self.active.add(rid)
             self.connected.set()
             mode = obj.get('user', 'json')
@@ -110,6 +110,7 @@ class HelperTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='sg10-', dir='/tmp')
         self.config = dict(CONFIG)
+        self.abort_repeats = 1 if self.config.get('backend') == 'vllm' else 2
         self.config.update(api_socket=self.directory.name + '/api.sock', health_socket=self.directory.name + '/health.sock')
         self.fixture = Fixture()
         self.server = await asyncio.start_server(self.fixture.accept, '127.0.0.1', 0, limit=16384)
@@ -247,10 +248,11 @@ class HelperTests(unittest.IsolatedAsyncioTestCase):
                 self.fixture.wire = [raw]
                 r, w = await self.request(self.payload('wire'))
                 self.assertEqual(await asyncio.wait_for(r.readexactly(len(raw)), 2), raw)
-                rid = self.fixture.requests[-1][1]['rid']
+                obj = self.fixture.requests[-1][1]
+                rid = obj.get('rid', obj.get('request_id'))
                 await helper.close(w)
                 await wait(lambda: not self.bridge.active)
-                self.assertEqual(self.fixture.aborted[-2:], [rid, rid])
+                self.assertEqual(self.fixture.aborted[-self.abort_repeats:], [rid] * self.abort_repeats)
                 self.assertEqual(self.bridge.cancelled, i)
                 self.assertEqual(self.bridge.completed, 0)
         self.assertFalse(self.bridge.fatal.is_set())
@@ -299,7 +301,7 @@ class HelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(rid, 'client-controlled')
         await helper.close(w)
         await wait(lambda: not self.bridge.active)
-        self.assertEqual(self.fixture.aborted, [rid, rid])
+        self.assertEqual(self.fixture.aborted, [rid] * self.abort_repeats)
         self.assertFalse(self.fixture.active)
         self.assertFalse(self.bridge.fatal.is_set())
         self.assertIn(b' 200 ', await self.response(payload=self.payload()))
@@ -467,7 +469,7 @@ if __name__ == '__main__':
     (out / 'result.json').write_text(json.dumps({'passed': result.wasSuccessful(), 'tests': result.testsRun,
         'failures': len(result.failures), 'errors': len(result.errors),
         'sources': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
-                    for pattern in ('pipeline/CMakeLists.txt', 'pipeline/Sglang.*', 'pipeline/sglang-*',
+                    for pattern in ('pipeline/CMakeLists.txt', 'pipeline/Sglang.*', 'pipeline/sglang-*', 'pipeline/engine-helper.py',
                                     'test/test-pipeline-sglang.*') for p in ROOT.glob(pattern)}}, indent=2))
     print('Artifacts:', out)
     raise SystemExit(not result.wasSuccessful())

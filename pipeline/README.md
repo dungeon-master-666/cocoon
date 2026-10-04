@@ -1,8 +1,8 @@
-# Pipeline-agent — supervisor, группа, WireGuard, HTTP gate и SGLang
+# Pipeline-agent — supervisor, группа, WireGuard, HTTP gate, SGLang и vLLM
 
-Агент реализован на C++ с `td::actor`, SHA-256 из `tdutils` и асинхронным HTTP-клиентом Boost.Beast. Он проверяет профиль, запускает локальный backend, выполняет health/warmup, следит за процессами и ограниченно останавливает их. Python helper и simulator используют стандартную библиотеку; реальный backend дополнительно требует закреплённый SGLang runtime.
+Агент реализован на C++ с `td::actor`, SHA-256 из `tdutils` и асинхронным HTTP-клиентом Boost.Beast. Он проверяет профиль, запускает локальный backend, выполняет health/warmup, следит за процессами и ограниченно останавливает их. Python helper и simulator используют стандартную библиотеку; реальный backend дополнительно требует закреплённый runtime SGLang или vLLM.
 
-Без секции `group` агент работает как локальный supervisor шага 6: `LOCAL_READY` означает warmup **одного** симулятора, `group_ready=false`, `epoch=null`. С секцией `group` включается протокол шага 7: два агента согласуют конфигурацию по mutual TLS и переходят в `READY` после проверок backend. Профиль `simulator-dev-pp2-wg-v1` добавляет настоящий WireGuard и изоляцию сети в Linux, шаг 8. Секция `gate` у head подключает эту группу к одному Cocoon worker, шаг 9. Адаптер SGLang шага 10 выполняет настоящую PP-генерацию на GPU через ту же группу и сеть. Во всех этих dev-режимах `hardware_attested=false`; аппаратной аттестации здесь нет.
+Без секции `group` агент работает как локальный supervisor шага 6: `LOCAL_READY` означает warmup **одного** симулятора, `group_ready=false`, `epoch=null`. С секцией `group` включается протокол шага 7: два агента согласуют конфигурацию по mutual TLS и переходят в `READY` после проверок backend. Профиль `simulator-dev-pp2-wg-v1` добавляет настоящий WireGuard и изоляцию сети в Linux, шаг 8. Секция `gate` у head подключает эту группу к одному Cocoon worker, шаг 9. Адаптеры SGLang шага 10 и vLLM шага 11 выполняют настоящую PP-генерацию на GPU через ту же группу и сеть. Во всех этих dev-режимах `hardware_attested=false`; аппаратной аттестации здесь нет.
 
 В целевом CVM deployment агент работает внутри **каждой** CVM. Head CVM содержит `worker-runner`, агент-координатор и rank 0 движка; member CVM — агент и rank 1. Отдельная CVM для координатора не нужна. Нативные проверки ниже запускают эти роли обычными процессами на Mac.
 
@@ -315,3 +315,43 @@ python3 test/test-pipeline-sglang-gpu.py
 нагрузки должен заранее остановить владелец стенда; тест отвергает занятую GPU.
 Это dev-стенд без CVM/CC. Статус, результаты и границы проверки —
 [STEP10-REPORT.md](STEP10-REPORT.md).
+
+
+## vLLM — шаг 11
+
+Профили `vllm-qwen3-0.6b-dev-pp2-wg-v1` и `vllm-qwen3-14b-dev-pp2-wg-v1`
+используют тот же `BackendAdapter`, membership, WireGuard и gate. Примеры:
+`profiles/vllm-qwen3-{0.6b,14b}-{head,member}.json`. Вся группа должна выбрать
+один backend/version/profile; разные эффективные конфигурации имеют разные digests.
+
+Закреплён vLLM `0.29.0+cu129` из GPU-пилота шага 2. Образ указан в `Vllm.cpp`,
+модели используют общий SHA-256 catalogue `sglang-models.json`. PP=2, TP=1,
+BF16, context 512–4096, одна последовательность, без CPU offload, prefix cache
+и CUDA graphs. Head слушает только engine loopback; member работает с `--headless`.
+Member health подтверждает живой launcher; только обязательная генерация на head
+подтверждает работу всей модели до объявления группы готовой.
+
+`engine-helper.py` содержит общие HTTP framing/backpressure, ограничения и владение
+деревом процессов; `sglang-helper.py` и `vllm-helper.py` задают поведение движка.
+Для vLLM helper заменяет клиентский request ID собственным. При disconnect закрывает
+upstream и обращается к приватному `vllm_control.CancellationMiddleware`: тот
+отменяет подготовку/streaming, дожидается адресного `engine.abort` и предотвращает
+позднюю регистрацию уже отменённого запроса. Ошибка подтверждения закрывает admission
+и перезапускает группу. Этот endpoint, как и metrics/admin API, недоступен через gate.
+
+Проверки:
+
+```bash
+python3 test/test-pipeline-vllm.py --build-dir build/local
+python3 test/test-pipeline-sglang.py --build-dir build/local
+python3 test/test-pipeline-worker.py --build-dir build/local
+python3 test/test-pipeline-vllm-gpu.py --prepare
+```
+
+GPU-команда переиспользует API/fault suite SGLang, но создаёт отдельные каталоги,
+контейнеры и dev-образ шага 11. Без `--prepare` проверяет уже подготовленный стенд.
+Две модели проверяются последовательно; перед запуском GPU должны быть свободны.
+Общий scheduler vLLM на head учитывает KV-блоки всего PP: тест проверяет running,
+waiting и KV usage до/после отмены. Headless member не публикует отдельные scheduler
+метрики; на нём дополнительно проверяются процессы и GPU, после stop — полный
+возврат памяти обоих ranks. Результаты и границы — [STEP11-REPORT.md](STEP11-REPORT.md).
