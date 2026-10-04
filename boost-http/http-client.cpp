@@ -10,6 +10,7 @@
 #include <string>
 
 #include "http.h"
+#include "errorcode.h"
 
 namespace cocoon {
 
@@ -123,10 +124,13 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
       headers.emplace_back(h.name_string(), h.value());
     }
 
-    sent_answer_ = true;
-    callback_->receive_answer(status_code, std::move(content_type), std::move(headers), "", false);
-
-    read_payload();
+    payload_completed_ = parser_.is_done();
+    callback_->receive_answer(status_code, std::move(content_type), std::move(headers), "", payload_completed_);
+    if (payload_completed_) {
+      do_close();
+    } else {
+      read_payload();
+    }
   }
 
   void read_payload() {
@@ -147,9 +151,8 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
       callback_->receive_payload_part(std::string(body_buf_, bytes), false);
     }
 
-    if (error == http::error::need_buffer) {
-      return read_payload();
-    }
+    if (error == http::error::need_buffer)
+      error = {};
 
     if (error) {
       return fail("read_payload", error);
@@ -166,21 +169,19 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
 
   void do_close() {
     beast::error_code error;
-    if (stream_.socket().shutdown(tcp::socket::shutdown_both, error)) {
-      LOG(ERROR) << "failed to close http socket: " << error.message();
-    }
+    stream_.socket().shutdown(tcp::socket::shutdown_both, error);
+    stream_.socket().close(error);
     self_ = nullptr;
   }
 
   void fail(const char *what, beast::error_code ec) {
     LOG(ERROR) << "failed http client: " << what << ": " << ec.message();
-    if (!sent_answer_) {
-      sent_answer_ = true;
+    if (!payload_completed_) {
       payload_completed_ = true;
-      callback_->receive_answer(502, "text/plain", {}, "", true);
-    } else if (!payload_completed_) {
-      payload_completed_ = true;
-      callback_->receive_payload_part("", true);
+      callback_->receive_error(td::Status::Error(ec == beast::error::timeout || ec == asio::error::timed_out
+                                                     ? ton::ErrorCode::timeout
+                                                     : ton::ErrorCode::notready,
+                                                 PSTRING() << "backend HTTP " << what << ": " << ec.message()));
     }
     do_close();
   }
@@ -204,7 +205,6 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
   char body_buf_[16 << 10];
   std::shared_ptr<HttpClientSession> self_;
 
-  bool sent_answer_{false};
   bool payload_completed_{false};
 };
 

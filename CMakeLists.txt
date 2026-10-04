@@ -337,6 +337,8 @@ target_link_libraries(cocoon_common PUBLIC ${COMMON_LIBRARIES})
 
 add_executable(test-answer-postprocessor EXCLUDE_FROM_ALL test/test-answer-postprocessor.cpp)
 target_link_libraries(test-answer-postprocessor PRIVATE cocoon_common)
+add_executable(test-http-client EXCLUDE_FROM_ALL test/test-http-client.cpp)
+target_link_libraries(test-http-client PRIVATE cocoon_common)
 
 add_executable(client-runner 
   runners/ClientRunner.cpp 

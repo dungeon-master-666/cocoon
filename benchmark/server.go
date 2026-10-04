@@ -17,6 +17,10 @@ var scenarios = map[string]bool{
 	"normal": true, "delay-headers": true, "delay-body": true, "hang": true,
 	"http-error": true, "disconnect-before-headers": true, "disconnect-after-headers": true,
 	"disconnect-mid-stream": true, "incomplete-json": true, "incomplete-sse": true,
+	"invalid-json-tail": true, "json-error": true, "empty-json": true,
+	"sse-error": true, "malformed-sse": true, "incomplete-event": true,
+	"disconnect-after-usage": true, "disconnect-after-done": true, "duplicate-done": true,
+	"http-client-error": true, "http-text-error": true, "empty-http-error": true, "no-content": true,
 }
 
 type backend struct {
@@ -99,10 +103,27 @@ func (b backend) completion(w http.ResponseWriter, r *http.Request) {
 	if b.scenario == "delay-headers" && !pause(r, b.delay) {
 		return
 	}
-	if b.scenario == "http-error" {
+	if b.scenario == "http-error" || b.scenario == "http-client-error" {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		writeJSON(w, map[string]any{"error": map[string]string{"message": "injected backend error", "type": "backend_error"}})
+		status := http.StatusServiceUnavailable
+		if b.scenario == "http-client-error" {
+			status = http.StatusBadRequest
+		}
+		w.WriteHeader(status)
+		writeJSON(w, map[string]any{"error": map[string]string{"message": "injected backend error", "type": "backend_error"},
+			"usage": map[string]int{"prompt_tokens": 34, "completion_tokens": 100}})
+		return
+	}
+	if b.scenario == "http-text-error" {
+		http.Error(w, "injected backend error", 503)
+		return
+	}
+	if b.scenario == "empty-http-error" {
+		w.WriteHeader(503)
+		return
+	}
+	if b.scenario == "no-content" {
+		w.WriteHeader(204)
 		return
 	}
 	if request.Stream {
@@ -125,6 +146,13 @@ func (b backend) completion(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"choices":[`)
 		return
 	}
+	if b.scenario == "empty-json" {
+		return
+	}
+	if b.scenario == "json-error" {
+		writeJSON(w, map[string]any{"error": map[string]string{"message": "injected backend error"}})
+		return
+	}
 	usage := map[string]any{
 		"prompt_tokens": 34, "completion_tokens": 100, "total_tokens": 134,
 		"prompt_tokens_details":     map[string]int{"cached_tokens": 11},
@@ -141,6 +169,9 @@ func (b backend) completion(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"id": "local-smoke", "object": object, "created": 1,
 			"model": request.Model, "choices": []any{choice}, "usage": usage})
+		if b.scenario == "invalid-json-tail" {
+			_, _ = io.WriteString(w, "garbage")
+		}
 		return
 	}
 	chunks := positiveQuery(r, "chunks", b.chunks)
@@ -189,8 +220,29 @@ func (b backend) completion(w http.ResponseWriter, r *http.Request) {
 	if !send([]any{finalChoice}, nil) || !send([]any{}, usage) {
 		return
 	}
+	switch b.scenario {
+	case "disconnect-after-usage":
+		disconnect(w)
+		return
+	case "sse-error":
+		_, _ = io.WriteString(w, "event: error\ndata: {\"error\":{\"message\":\"injected backend error\"}}\n\n")
+		return
+	case "malformed-sse":
+		_, _ = io.WriteString(w, "data: {invalid}\n\n")
+		return
+	case "incomplete-event":
+		_, _ = io.WriteString(w, "data: {\"choices\":[]}")
+		return
+	}
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()
+	if b.scenario == "disconnect-after-done" {
+		disconnect(w)
+		return
+	}
+	if b.scenario == "duplicate-done" {
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}
 }
 
 func (b backend) handler() http.Handler {

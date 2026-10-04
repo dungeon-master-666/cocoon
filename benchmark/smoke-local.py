@@ -2,6 +2,9 @@
 """One-command native Cocoon smoke/fault test, with synthetic input and fake TON."""
 
 import argparse
+import base64
+import hashlib
+import subprocess
 import errno
 import http.client
 import json
@@ -18,7 +21,10 @@ from local_processes import Processes, check_ports, group_alive, local_ports
 
 SCENARIOS = ('normal', 'delay-headers', 'delay-body', 'http-error', 'hang',
              'disconnect-before-headers', 'disconnect-after-headers',
-             'disconnect-mid-stream', 'incomplete-json', 'incomplete-sse')
+             'disconnect-mid-stream', 'incomplete-json', 'incomplete-sse',
+             'invalid-json-tail', 'empty-json', 'json-error', 'sse-error', 'malformed-sse',
+             'incomplete-event', 'disconnect-after-usage', 'disconnect-after-done', 'duplicate-done',
+             'http-client-error', 'http-text-error', 'empty-http-error', 'no-content')
 MODEL = 'Qwen/Qwen3-8B'
 
 
@@ -83,6 +89,7 @@ def assert_usage(usage):
         require(usage[name] == expected, f'incorrect {name}: {usage}')
     require(usage['prompt_tokens_details']['cached_tokens'] == 11, 'cached usage lost')
     require(usage['completion_tokens_details']['reasoning_tokens'] == 10, 'reasoning usage lost')
+    require(usage['total_cost'] == 268, 'nonzero test tariff or usage cost lost')
 
 
 def assert_success(result, stream, path):
@@ -108,6 +115,83 @@ def assert_success(result, stream, path):
         content = choice['text'] if path == '/v1/completions' else choice['message']['content']
         require(content == 'local smoke response' and choice['finish_reason'] == 'stop', 'incorrect JSON answer')
         assert_usage(value['usage'])
+
+
+def statistics(ports):
+    return {role: json.loads(request(ports[role + '_http'], '/jsonstats')['body'])
+            for role in ('worker', 'proxy', 'client')}
+
+
+def encryption_ready(port):
+    page = request(port, '/stats')['body']
+    marker = '<h1>KNOWN PRIVATE KEYS</h1>'
+    return marker in page and FAKE_PUBLIC_KEY.upper() in page.split(marker, 1)[1].split('</table>', 1)[0]
+
+
+def accounting_values(snapshot):
+    return {
+        'worker_tokens': snapshot['worker']['stats']['total_adjusted_tokens_used'][0],
+        'proxy_tokens': snapshot['proxy']['stats']['total_adjusted_tokens_used'][0],
+        'worker_payment': sum(p['earned_tokens_max_known'] for p in snapshot['worker']['proxies']),
+        'client_payment': sum(p['tokens_used_proxy_max'] for p in snapshot['client']['proxies']),
+        'proxy_worker_balance': sum(p['earned_tokens'] for p in snapshot['proxy']['workers']),
+        'proxy_client_balance': sum(p['used_tokens'] for p in snapshot['proxy']['clients']),
+    }
+
+
+def check_accounting(ports, before, success):
+    expected = 134 if success else 0
+    old = accounting_values(before)
+    deadline = time.monotonic() + 5
+    while True:
+        after = statistics(ports)
+        deltas = {key: value - old[key] for key, value in accounting_values(after).items()}
+        counters = {role: {key: after[role]['stats'][key][0] - before[role]['stats'][key][0]
+                           for key in ('queries', 'success', 'failed')} for role in before}
+        target = {'queries': 1, 'success': int(success), 'failed': int(not success)}
+        if all(value == expected for value in deltas.values()) and all(value == target for value in counters.values()):
+            # Include a later snapshot: duplicate/late completion must not change
+            # accounting after the first terminal result.
+            time.sleep(0.15)
+            stable = statistics(ports)
+            require(accounting_values(stable) == accounting_values(after), 'late billing update')
+            for role in before:
+                require(all(stable[role]['stats'][key][0] == after[role]['stats'][key][0] for key in target), 'duplicate completion')
+            require(all(c['running_queries'] == 0 and c['reserved_tokens'] == 0 for c in stable['proxy']['clients']), 'request reservation leaked')
+            return {'token_deltas': deltas, 'terminal_counters': counters}
+        if time.monotonic() >= deadline:
+            raise AssertionError(f'accounting/terminal mismatch: expected {expected}, got {deltas}; counters={counters}')
+        time.sleep(0.1)
+
+
+# Public fixture from KeyManagerRunner::add_static_private_key, only --fake-ton.
+FAKE_PUBLIC_KEY = base64.b64decode('+2fQ/NM48g4NSVfZ6CrcEB0uNROkSKOrRgUu4biMWBg=').hex()
+
+
+def crypt(args, key, value, decrypt=False):
+    result = subprocess.run([str(args.build_dir / 'encrypt-message'), '-k', str(key), '-p', FAKE_PUBLIC_KEY,
+                             *(['-d'] if decrypt else [])], input=json.dumps(value), text=True,
+                            capture_output=True, timeout=5, check=True)
+    require('failed to decrypt' not in result.stderr, 'encrypted response failed authentication')
+    return json.loads(result.stdout)
+
+
+def decrypt_response(args, key, result, stream):
+    result = dict(result)
+    if stream:
+        lines = []
+        for line in result['body'].splitlines():
+            if line.startswith('data: ') and line != 'data: [DONE]':
+                value = json.loads(line[6:])
+                require(value.get('is_encrypted') == 'v1', 'unencrypted backend event')
+                line = 'data: ' + json.dumps(crypt(args, key, value, True))
+            lines.append(line)
+        result['body'] = '\n'.join(lines)
+    elif result['body']:
+        value = json.loads(result['body'])
+        require(value.get('is_encrypted') == 'v1', 'unencrypted backend body')
+        result['body'] = json.dumps(crypt(args, key, value, True))
+    return result
 
 
 def choose_ports():
@@ -144,24 +228,45 @@ def run_case(args, scenario, output, backend_binary):
                                        '--local-backend', f'127.0.0.1:{backend_port}', '--model', MODEL])
             owned_pids.append(launcher.pid)
             wait_ready(processes, lambda: models_ready(ports['client_http']), args.startup_timeout)
+            # --local-all starts with a free worker. Use its existing admin API
+            # so successful billing is nonzero and failure checks are meaningful.
+            changed = request(ports['worker_http'], '/request/change_coefficient?coefficient=1')
+            require(changed['status'] == 200 and 'coefficient set to 1' in changed['body'], 'test tariff not applied')
+            wait_ready(processes, lambda: [w['coefficient'] for w in statistics(ports)['proxy']['worker_connections']] == [1000], 5)
+            report['worker_coefficient'] = 1000
             success = scenario in ('normal', 'delay-headers', 'delay-body')
             cases = [(False, '/v1/chat/completions'), (True, '/v1/chat/completions')]
             if scenario == 'normal':
                 cases += [(False, '/v1/completions'), (True, '/v1/completions')]
             if not success:
-                cases = [(scenario != 'incomplete-json', '/v1/chat/completions')]
-            for stream, path in cases:
+                cases = [(scenario not in ('incomplete-json', 'invalid-json-tail', 'empty-json', 'json-error'), '/v1/chat/completions')]
+            cases = [(stream, path, False) for stream, path in cases]
+            if scenario in ('normal', 'http-error', 'http-text-error', 'json-error', 'sse-error', 'disconnect-after-done'):
+                # Model readiness can precede the periodic key-manager fetch.
+                # /stats lists only public fingerprints and expiry timestamps.
+                wait_ready(processes, lambda: encryption_ready(ports['proxy_http']), args.startup_timeout)
+                cases += [(stream, path, True) for stream, path, _ in cases]
+            key = case_dir / 'test-client-key.bin'
+            key.write_bytes(os.urandom(32))
+            key.chmod(0o600)
+            for stream, path, encrypted in cases:
+                before = statistics(ports)
                 payload = {'model': MODEL, 'stream': stream, 'max_tokens': 128, 'timeout': 4}
                 if path == '/v1/completions':
                     payload['prompt'] = 'hello'
                 else:
                     payload['messages'] = [{'role': 'user', 'content': 'hello'}]
+                if encrypted:
+                    payload = crypt(args, key, payload)
                 result = request(ports['client_http'], path, payload)
-                report['requests'].append({'stream': stream, 'path': path, **result})
+                report['requests'].append({'stream': stream, 'path': path, 'encrypted': encrypted, **result})
                 processes.check()
                 log = (case_dir / 'backend.log').read_text()
                 require(f'request scenario={scenario} stream={str(stream).lower()}' in log,
                         'request did not reach the owned backend')
+                if encrypted:
+                    require('local smoke response' not in result['body'] and 'injected backend error' not in result['body'], 'plaintext response leaked')
+                    result = decrypt_response(args, key, result, stream and scenario not in ('http-error', 'http-text-error'))
                 if success:
                     assert_success(result, stream, path)
                     if scenario.startswith('delay-'):
@@ -171,24 +276,20 @@ def run_case(args, scenario, output, backend_binary):
                     require(result['transport_error'] is None or
                             result['transport_error'].startswith(('IncompleteRead', 'RemoteDisconnected', 'ConnectionResetError')),
                             f'unexpected transport error / test timeout: {result}')
-                    if scenario == 'http-error':
-                        require(result['status'] == 503 and 'injected backend error' in result['body'],
-                                f'backend HTTP error lost: {result}')
-                    elif scenario in ('hang', 'disconnect-before-headers'):
+                    if scenario in ('http-error', 'http-client-error', 'http-text-error', 'empty-http-error'):
+                        require(result['status'] == (400 if scenario == 'http-client-error' else 503), f'HTTP error status lost: {result}')
+                        require(not result['transport_error'], f'complete backend HTTP error body truncated: {result}')
+                        if scenario != 'empty-http-error':
+                            require('injected backend error' in result['body'], f'backend error reason lost: {result}')
+                    elif scenario in ('hang', 'disconnect-before-headers', 'no-content'):
                         require(result['status'] in (502, 504), f'expected upstream error: {result}')
                     else:
-                        require(result['status'] in (200, 500, 502, 504) or result['transport_error'],
-                                f'unexpected status for backend truncation: {result}')
-                        require('[DONE]' not in result['body'] and 'local smoke response' not in result['body'],
-                                f'injected truncation produced a complete answer: {result}')
-                        if result['status'] == 200 and not result['transport_error'] and 'error' not in result['body']:
-                            if scenario in ('disconnect-mid-stream', 'incomplete-sse'):
-                                events = [json.loads(line[6:]) for line in result['body'].splitlines()
-                                          if line.startswith('data: ')]
-                                expected = 2 if scenario == 'disconnect-mid-stream' else 3
-                                require(len(events) == expected, f'partial SSE content lost: {result}')
-                            report['known_limitation'] = 'Worker accepts incomplete backend response as HTTP success; pipeline step 3.'
-                            require(not args.strict_faults, report['known_limitation'])
+                        require(result['status'] in (500, 502, 504) or result['transport_error'],
+                                f'incomplete/error response completed successfully: {result}')
+                        require('[DONE]' not in result['body'], f'failed response published success marker: {result}')
+                        if scenario in ('json-error', 'sse-error'):
+                            require('injected backend error' in result['body'], f'backend error details lost: {result}')
+                report['requests'][-1]['accounting'] = check_accounting(ports, before, success)
             report['passed'] = True
     except BaseException as exc:
         report['passed'] = False
@@ -212,8 +313,7 @@ def run_case(args, scenario, output, backend_binary):
             raise
         finally:
             (case_dir / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
-    print(f'PASS {scenario}: requests and cleanup' +
-          (f"; KNOWN LIMITATION: {report['known_limitation']}" if 'known_limitation' in report else ''), flush=True)
+    print(f'PASS {scenario}: responses, billing, single completion and cleanup', flush=True)
 
 
 def build(output, name, command, timeout):
@@ -230,7 +330,7 @@ def main():
     parser.add_argument('--scenario', choices=(*SCENARIOS, 'all'), default='normal')
     parser.add_argument('--output-dir', type=Path, help='New directory for retained configs, logs and result.json')
     parser.add_argument('--startup-timeout', type=float, default=45)
-    parser.add_argument('--strict-faults', action='store_true', help='Fail on known HTTP lifecycle limitations (step 3)')
+    parser.add_argument('--strict-faults', action='store_true', help='Compatibility flag; all fault checks are now always strict')
     args = parser.parse_args()
     require(args.startup_timeout > 0, 'startup timeout must be positive')
     args.build_dir = args.build_dir.resolve()
@@ -241,10 +341,23 @@ def main():
         output = Path(tempfile.mkdtemp(prefix='cocoon-smoke-'))
     output.chmod(0o700)
     print(f'Artifacts: {output}', flush=True)
+    sources = ['CMakeLists.txt', 'benchmark/server.go', 'benchmark/server_test.go', 'benchmark/smoke-local.py',
+               'boost-http/http-client.cpp', 'boost-http/http.cpp', 'boost-http/http.h',
+               'runners/helpers/ValidateRequest.cpp', 'runners/helpers/ValidateRequest.h',
+               'runners/worker/WorkerRunningRequest.cpp', 'runners/worker/WorkerRunningRequest.hpp',
+               'runners/worker/WorkerUplinkMonitor.cpp', 'runners/client/ClientRunningRequest.cpp',
+               'runners/client/ClientRunningRequest.h', 'test/test-http-client.cpp', 'test/test-answer-postprocessor.cpp']
+    (output / 'source-sha256.json').write_text(json.dumps(
+        {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in sources}, indent=2) + '\n')
     try:
         if not args.skip_build:
             build(output, 'build-cocoon', [sys.executable, str(ROOT / 'scripts/cocoon-launch'), '--local-all',
                   '--build-dir', str(args.build_dir), '--just-build'], 1800)
+        if not args.skip_build:
+            build(output, 'build-response-tests', ['cmake', '--build', str(args.build_dir), '--target',
+                  'test-http-client', 'test-answer-postprocessor', 'encrypt-message', '-j', '4'], 1800)
+        for binary in ('test-http-client', 'test-answer-postprocessor'):
+            build(output, binary, [str(args.build_dir / binary)], 30)
         backend_binary = output / 'backend'
         build(output, 'build-backend', ['go', 'build', '-o', str(backend_binary), str(ROOT / 'benchmark/server.go')], 120)
         selected = SCENARIOS if args.scenario == 'all' else (args.scenario,)

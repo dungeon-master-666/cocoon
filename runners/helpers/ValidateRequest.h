@@ -69,20 +69,39 @@ class AnswerPostprocessor {
   void set_sse(bool value) {
     is_sse_ = value;
   }
-  std::string add_next_answer_slice(td::Slice);
-  std::string finalize();
+  void set_transcription(bool value) {
+    is_transcription_ = value;
+  }
+  td::Result<std::string> add_next_answer_slice(td::Slice);
+  td::Result<std::string> finalize();
   ton::tl_object_ptr<cocoon_api::tokensUsed> usage();
+  const std::string &error_payload() const {
+    return error_payload_;
+  }
 
  private:
   void process_json(nlohmann::json &value);
-  std::string add_sse_slice(td::Slice event);
+  td::Result<std::string> add_sse_slice(td::Slice event);
+  td::Result<std::string> sse_line(std::string line);
+  td::Status fail(std::string reason);
+  td::Status check_json(const nlohmann::json &value);
+  td::Status backend_error(nlohmann::json value);
 
   td::int32 coef_;
   std::string last_;
   bool is_sse_{false};
+  bool is_transcription_{false};
   bool sse_has_data_{false};
   std::string sse_data_;
   std::string sse_fields_;
+  std::string sse_event_type_;
+  std::string terminal_;
+  std::string error_;
+  std::string error_payload_;
+  bool skip_lf_{false};
+  bool first_sse_line_{true};
+  bool done_{false};
+  bool finalized_{false};
   td::int32 prompt_tokens_mult_;
   td::int32 cached_tokens_mult_;
   td::int32 completion_tokens_mult_;

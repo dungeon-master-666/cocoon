@@ -116,6 +116,7 @@ void WorkerRunningRequest::start_request() {
         runner_config_->root_contract_config->reasoning_tokens_price_multiplier(),
         runner_config_->root_contract_config->price_per_token(), worker_private_key_, client_public_key_);
     postprocessor_->add_prompt(req->payload_.as_slice());
+    postprocessor_->set_transcription(url == "/v1/audio/transcriptions");
 
     TRY_RESULT_ASSIGN(request, ton::http::HttpRequest::create(req->method_, req->url_, req->http_version_));
     for (auto &x : req->headers_) {
@@ -157,6 +158,10 @@ void WorkerRunningRequest::start_request() {
         td::actor::send_closure_later(self_, &WorkerRunningRequest::send_payload_part, body_part, is_completed);
       });
     }
+    void receive_error(td::Status error) override {
+      scheduler_->run_in_context(
+          [&]() { td::actor::send_closure_later(self_, &WorkerRunningRequest::send_error, std::move(error)); });
+    }
 
    private:
     td::actor::ActorId<WorkerRunningRequest> self_;
@@ -170,6 +175,14 @@ void WorkerRunningRequest::start_request() {
 void WorkerRunningRequest::process_request_response(td::int32 status_code,
                                                     std::vector<std::pair<std::string, std::string>> headers,
                                                     std::string payload_part, bool payload_is_completed) {
+  if (completed_)
+    return;
+  backend_status_ = status_code;
+  if (status_code < 200 || status_code >= 300) {
+    backend_headers_ = std::move(headers);
+    receive_http_error_payload(std::move(payload_part), payload_is_completed);
+    return;
+  }
   for (const auto &header : headers) {
     auto name = header.first;
     std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -186,13 +199,57 @@ void WorkerRunningRequest::send_error(td::Status error) {
   }
   LOG(WARNING) << "worker request " << proxy_request_id_.to_hex() << " failed: " << error;
 
-  auto final_info = create_final_info();
+  if (sent_answer_ && postprocessor_ && !postprocessor_->error_payload().empty()) {
+    send_processed_payload(postprocessor_->error_payload(), false);
+  }
+
+  auto final_info = create_final_info(false);
   auto ans = cocoon::create_serialize_tl_object<cocoon_api::proxy_queryAnswerErrorEx>(
       proxy_request_id_, error.code(), error.message().str(), 1, std::move(final_info));
   td::actor::send_closure(runner_, &WorkerRunner::send_message_to_connection, proxy_connection_id_, std::move(ans));
   sent_answer_ = true;
 
   finish_request(false);
+}
+
+td::Result<std::string> WorkerRunningRequest::process_payload(td::Slice payload, bool completed) {
+  if (backend_status_ < 200 || backend_status_ >= 300)
+    return payload.str();
+  TRY_RESULT(output, postprocessor_->add_next_answer_slice(payload));
+  if (completed) {
+    TRY_RESULT(tail, postprocessor_->finalize());
+    output += tail;
+  }
+  return output;
+}
+
+void WorkerRunningRequest::receive_http_error_payload(std::string payload, bool completed) {
+  // Diagnostics are bounded independently of the future streaming/backpressure
+  // work. A malformed/oversized error response is itself an upstream error.
+  if (error_body_.size() + payload.size() > (1 << 20)) {
+    send_error(td::Status::Error(ton::ErrorCode::notready, "backend HTTP error body exceeds 1 MiB"));
+    return;
+  }
+  error_body_ += payload;
+  if (!completed)
+    return;
+  if (!worker_private_key_.is_zero()) {
+    auto value = nlohmann::json::parse(error_body_, nullptr, false);
+    if (!value.is_object())
+      value = {{"error", {{"message", error_body_}}}};
+    encrypt_json(value, worker_private_key_, client_public_key_, false);
+    error_body_ = value.dump();
+    for (auto &header : backend_headers_) {
+      auto name = header.first;
+      std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+      if (name == "content-type")
+        header.second = "application/json";
+    }
+  }
+  // Preserve the upstream HTTP status/body, then send the existing TL error
+  // terminal. A completed HTTP error body is not a successful inference.
+  send_answer(backend_status_, std::move(backend_headers_), std::move(error_body_), false);
+  send_error(td::Status::Error(ton::ErrorCode::notready, PSTRING() << "backend HTTP status " << backend_status_));
 }
 
 void WorkerRunningRequest::send_answer(td::int32 status_code, std::vector<std::pair<std::string, std::string>> headers,
@@ -202,10 +259,12 @@ void WorkerRunningRequest::send_answer(td::int32 status_code, std::vector<std::p
   }
   LOG(DEBUG) << "worker request " << proxy_request_id_.to_hex() << ": starting sending answer";
 
-  auto payload_to_send = postprocessor_->add_next_answer_slice(orig_payload);
-  if (payload_is_completed) {
-    payload_to_send = payload_to_send + postprocessor_->finalize();
+  auto result = process_payload(orig_payload, payload_is_completed);
+  if (result.is_error()) {
+    send_error(result.move_as_error());
+    return;
   }
+  auto payload_to_send = result.move_as_ok();
 
   stats()->answer_bytes_sent += (double)payload_to_send.size();
   if (payload_to_send.size() > 0) {
@@ -257,16 +316,26 @@ void WorkerRunningRequest::send_payload_part(std::string orig_payload_part, bool
   if (completed_) {
     return;
   }
+  if (backend_status_ < 200 || backend_status_ >= 300) {
+    receive_http_error_payload(std::move(orig_payload_part), payload_is_completed);
+    return;
+  }
   LOG(DEBUG) << "worker request " << proxy_request_id_.to_hex() << ": sending next payload part";
 
   CHECK(sent_answer_);
   CHECK(!completed_);
 
-  auto payload_to_send = postprocessor_->add_next_answer_slice(orig_payload_part);
-  if (payload_is_completed) {
-    payload_to_send = payload_to_send + postprocessor_->finalize();
+  auto result = process_payload(orig_payload_part, payload_is_completed);
+  if (result.is_error()) {
+    send_error(result.move_as_error());
+    return;
   }
+  auto payload_to_send = result.move_as_ok();
 
+  send_processed_payload(std::move(payload_to_send), payload_is_completed);
+}
+
+void WorkerRunningRequest::send_processed_payload(std::string payload_to_send, bool payload_is_completed) {
   if (!payload_to_send.size() && !payload_is_completed) {
     return;
   }
@@ -291,7 +360,8 @@ void WorkerRunningRequest::finish_request(bool is_success) {
     return;
   }
   if (postprocessor_) {
-    auto tokens_used = postprocessor_->usage();
+    auto tokens_used =
+        is_success ? postprocessor_->usage() : ton::create_tl_object<cocoon_api::tokensUsed>(0, 0, 0, 0, 0);
     LOG(INFO) << "worker request " << proxy_request_id_.to_hex()
               << ": completed: success=" << (is_success ? "YES" : "NO") << " time=" << run_time()
               << " payload_parts=" << payload_parts_ << " payload_bytes=" << payload_bytes_
@@ -327,9 +397,10 @@ std::string WorkerRunningRequest::generate_worker_debug_inner() {
   return v.dump();
 }
 
-ton::tl_object_ptr<cocoon_api::proxy_queryFinalInfo> WorkerRunningRequest::create_final_info() {
+ton::tl_object_ptr<cocoon_api::proxy_queryFinalInfo> WorkerRunningRequest::create_final_info(bool success) {
   ton::tl_object_ptr<cocoon_api::tokensUsed> tokens_used =
-      postprocessor_ ? postprocessor_->usage() : ton::create_tl_object<cocoon_api::tokensUsed>(0, 0, 0, 0, 0);
+      success && postprocessor_ ? postprocessor_->usage()
+                                : ton::create_tl_object<cocoon_api::tokensUsed>(0, 0, 0, 0, 0);
   return ton::create_tl_object<cocoon_api::proxy_queryFinalInfo>(
       (enable_debug_ ? 1 : 0) | (proto_version_ >= 2 ? 2 : 0), std::move(tokens_used), generate_worker_debug(),
       started_at_unix_, td::Clocks::system());

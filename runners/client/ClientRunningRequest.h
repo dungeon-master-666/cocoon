@@ -46,7 +46,7 @@ class ClientRunningRequest : public td::actor::Actor {
 
   void start_up() override;
   void alarm() override {
-    if (answer_sent_) {
+    if (!answer_sent_) {
       return_error(td::Status::Error(ton::ErrorCode::timeout, "timeout"), nullptr);
     } else {
       finish_request(false, nullptr);
@@ -107,6 +107,7 @@ class ClientRunningRequest : public td::actor::Actor {
   std::string in_payload_;
   std::unique_ptr<http::HttpRequestCallback> callback_;
   bool answer_sent_{false};
+  bool http_error_response_{false};
   bool sse_response_{false};
   bool payload_completed_{false};
   std::shared_ptr<ClientProxyInfo> proxy_;

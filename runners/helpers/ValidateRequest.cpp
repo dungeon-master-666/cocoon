@@ -14,6 +14,7 @@
 #include "td/utils/buffer.h"
 #include "td/utils/misc.h"
 #include "td/utils/optional.h"
+#include "td/utils/utf8.h"
 #include "tdport/td/e2e/MessageEncryption.h"
 #include "runners/helpers/Ton.h"
 #include "third-party/multipart-parser-c/multipart_parser.h"
@@ -1465,83 +1466,140 @@ void AnswerPostprocessor::process_json(nlohmann::json &v) {
   }
 }
 
-std::string AnswerPostprocessor::add_next_answer_slice(td::Slice event) {
-  if (is_sse_) {
-    return add_sse_slice(event);
-  }
-  last_ += event.str();
-
-  td::StringBuilder sb;
-  std::stringstream ss(last_);
-  size_t pos = 0;
-  bool is_end = false;
-  while (!is_end) {
-    try {
-      nlohmann::json v;
-      ss >> v;
-      pos = ss.tellg();
-
-      process_json(v);
-
-      sb << v.dump() << "\n";
-    } catch (...) {
-      is_end = true;
-    }
-  }
-  last_ = last_.substr(pos);
-  return sb.as_cslice().str();
+td::Status AnswerPostprocessor::fail(std::string reason) {
+  if (error_.empty())
+    error_ = std::move(reason);
+  return td::Status::Error(ton::ErrorCode::notready, error_);
 }
 
-std::string AnswerPostprocessor::add_sse_slice(td::Slice event) {
+td::Status AnswerPostprocessor::check_json(const nlohmann::json &value) {
+  if (!value.is_object())
+    return fail("backend response must be a JSON object");
+  if (value.contains("error") && !value["error"].is_null()) {
+    return backend_error({{"error", value["error"]}});
+  }
+  if (value.contains("type") && value["type"] == "error") {
+    return backend_error({{"error", value}});
+  }
+  return td::Status::OK();
+}
+
+td::Status AnswerPostprocessor::backend_error(nlohmann::json value) {
+  // Error details use the same encryption as ordinary response content. Never
+  // copy model/user data into the unencrypted TL control error or worker log.
+  if (!sender_private_key_.is_zero())
+    encrypt_json(value, sender_private_key_, receiver_public_key_, false);
+  error_payload_ = is_sse_ ? "event: error\ndata: " + value.dump() + "\n\n" : value.dump() + "\n";
+  return fail("backend reported an error");
+}
+
+td::Result<std::string> AnswerPostprocessor::add_next_answer_slice(td::Slice event) {
+  if (!error_.empty())
+    return fail(error_);
+  if (finalized_)
+    return fail("data after response completion");
+  if (is_sse_)
+    return add_sse_slice(event);
+  // JSON is one document. Validate the whole body, including trailing bytes,
+  // only after HTTP framing has completed successfully.
   last_ += event.str();
-  td::StringBuilder sb;
-  size_t pos = 0;
-  while (true) {
-    auto end = last_.find('\n', pos);
-    if (end == std::string::npos) {
-      break;
-    }
-    auto line = last_.substr(pos, end - pos);
-    pos = end + 1;
-    if (!line.empty() && line.back() == '\r') {
-      line.pop_back();
-    }
-    if (line.empty()) {
-      // An SSE event can span several data lines and arbitrary HTTP chunks.
-      if (sse_has_data_) {
-        if (sse_data_ == "[DONE]" || sse_data_.empty()) {
-          sb << sse_fields_ << "data: " << sse_data_ << "\n\n";
-        } else {
-          try {
-            auto value = nlohmann::json::parse(sse_data_);
-            process_json(value);
-            sb << sse_fields_ << "data: " << value.dump() << "\n\n";
-          } catch (const nlohmann::json::exception &) {
-            LOG(ERROR) << "worker request: invalid JSON in SSE event";
-          }
-        }
-      } else if (!sse_fields_.empty()) {
-        sb << sse_fields_ << "\n";
-      }
-      sse_has_data_ = false;
-      sse_data_.clear();
-      sse_fields_.clear();
-    } else if (line == "data" || line.compare(0, 5, "data:") == 0) {
-      auto data = line == "data" ? std::string() : line.substr(5);
-      if (!data.empty() && data.front() == ' ') {
-        data.erase(0, 1);
-      }
-      if (sse_has_data_) {
+  return std::string();
+}
+
+td::Result<std::string> AnswerPostprocessor::sse_line(std::string line) {
+  if (first_sse_line_) {
+    first_sse_line_ = false;
+    if (line.compare(0, 3, "\xEF\xBB\xBF") == 0)
+      line.erase(0, 3);
+  }
+  if (!line.empty()) {
+    auto colon = line.find(':');
+    auto field = line.substr(0, colon);
+    auto data = colon == std::string::npos ? std::string() : line.substr(colon + 1);
+    if (!data.empty() && data.front() == ' ')
+      data.erase(0, 1);
+    if (field == "data") {
+      if (sse_has_data_)
         sse_data_ += '\n';
-      }
       sse_has_data_ = true;
       sse_data_ += data;
     } else {
+      if (field == "event")
+        sse_event_type_ = data;
       sse_fields_ += line + '\n';
     }
+    return std::string();
   }
-  last_.erase(0, pos);
-  return sb.as_cslice().str();
+  std::string output;
+  if (sse_event_type_ == "error") {
+    if (!td::check_utf8(sse_data_)) {
+      return fail("invalid UTF-8 in SSE error event");
+    }
+    auto value = nlohmann::json::parse(sse_data_, nullptr, false);
+    if (!value.is_object() || !value.contains("error"))
+      value = {{"error", {{"message", sse_data_}}}};
+    return backend_error(std::move(value));
+  }
+  if (sse_has_data_) {
+    if (done_)
+      return fail("SSE data after terminal event");
+    if (sse_data_ == "[DONE]") {
+      done_ = true;
+      // Do not publish a success marker before the HTTP final chunk/EOF.
+      terminal_ = sse_fields_ + "data: [DONE]\n\n";
+    } else if (sse_data_.empty()) {
+      output = sse_fields_ + "data: \n\n";
+    } else {
+      auto value = nlohmann::json::parse(sse_data_, nullptr, false);
+      if (value.is_discarded())
+        return fail("invalid JSON in SSE event");
+      TRY_STATUS(check_json(value));
+      try {
+        bool transcript_done = is_transcription_ && value.contains("type") && value["type"] == "transcript.text.done";
+        if (transcript_done && (!value.contains("text") || !value["text"].is_string())) {
+          return fail("invalid transcription terminal event");
+        }
+        process_json(value);
+        output = sse_fields_ + "data: " + value.dump() + "\n\n";
+        if (transcript_done) {
+          done_ = true;
+          terminal_ = std::move(output);
+          output.clear();
+        }
+      } catch (const nlohmann::json::exception &) {
+        return fail("invalid backend SSE response");
+      }
+    }
+  } else if (!sse_fields_.empty()) {
+    output = sse_fields_ + "\n";
+  }
+  sse_has_data_ = false;
+  sse_data_.clear();
+  sse_fields_.clear();
+  sse_event_type_.clear();
+  return output;
+}
+
+td::Result<std::string> AnswerPostprocessor::add_sse_slice(td::Slice event) {
+  std::string output;
+  for (char c : event) {
+    // SSE accepts LF, CRLF and CR; the CR/LF pair can span HTTP chunks.
+    if (skip_lf_) {
+      skip_lf_ = false;
+      if (c == '\n')
+        continue;
+    }
+    if (c == '\n' || c == '\r') {
+      skip_lf_ = c == '\r';
+      auto line = std::move(last_);
+      last_.clear();
+      TRY_RESULT(part, sse_line(std::move(line)));
+      output += part;
+    } else {
+      last_ += c;
+    }
+  }
+  return output;
 }
 
 ton::tl_object_ptr<cocoon_api::tokensUsed> AnswerPostprocessor::usage() {
@@ -1554,18 +1612,30 @@ ton::tl_object_ptr<cocoon_api::tokensUsed> AnswerPostprocessor::usage() {
       prompt_tokens_adj + cached_tokens_adj + completion_tokens_adj + reasoning_tokens_adj);
 }
 
-std::string AnswerPostprocessor::finalize() {
-  if (is_sse_ && (sse_has_data_ || !sse_fields_.empty())) {
-    LOG(ERROR) << "worker request: incomplete SSE event at end of answer";
+td::Result<std::string> AnswerPostprocessor::finalize() {
+  if (!error_.empty())
+    return fail(error_);
+  if (finalized_)
+    return fail("response already finalized");
+  finalized_ = true;
+  if (is_sse_) {
+    if (!last_.empty() || sse_has_data_ || !sse_fields_.empty())
+      return fail("incomplete SSE event at end of response");
+    if (!done_)
+      return fail("SSE response ended without a terminal event");
+    return std::move(terminal_);
   }
-  if (last_.size() > 0) {
-    /* probably just whitespace*/
-    if (last_.size() >= 4) {
-      LOG(ERROR) << "worker request: unprocessed data in answer: bytes=" << last_.size();
-    }
-    // do something?
+  auto value = nlohmann::json::parse(last_, nullptr, false);
+  last_.clear();
+  if (value.is_discarded())
+    return fail("invalid or incomplete JSON response");
+  TRY_STATUS(check_json(value));
+  try {
+    process_json(value);
+    return value.dump() + "\n";
+  } catch (const nlohmann::json::exception &) {
+    return fail("invalid backend JSON response");
   }
-  return "";
 }
 
 void encrypt_json(nlohmann::json &v, const td::Bits256 &private_key, const td::Bits256 &public_key,

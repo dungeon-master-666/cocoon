@@ -126,6 +126,7 @@ void ClientRunningRequest::process_answer_ex_impl(cocoon_api::client_queryAnswer
 
   callback_->receive_answer(response->status_code_, "application/json", std::move(headers));
   answer_sent_ = true;
+  http_error_response_ = response->status_code_ < 200 || response->status_code_ >= 300;
 
   bool is_completed = ans.flags_ & 1;
 
@@ -142,6 +143,8 @@ void ClientRunningRequest::process_answer_ex_impl(cocoon_api::client_queryAnswer
 }
 
 void ClientRunningRequest::process_answer_ex_impl(cocoon_api::client_queryAnswerErrorEx &ans) {
+  if (payload_completed_)
+    return;
   LOG(DEBUG) << "client request " << request_id_.to_hex() << ": received error";
 
   if (!answer_sent_) {
@@ -152,6 +155,8 @@ void ClientRunningRequest::process_answer_ex_impl(cocoon_api::client_queryAnswer
 }
 
 void ClientRunningRequest::process_answer_ex_impl(cocoon_api::client_queryAnswerPartEx &ans) {
+  if (payload_completed_)
+    return;
   if (!answer_sent_) {
     LOG(ERROR) << "client request " << request_id_.to_hex() << ": received payload part before answer";
     return;
@@ -215,6 +220,7 @@ void ClientRunningRequest::return_error_str(td::int32 ton_error_code, std::strin
 
   callback_->receive_answer(error_code, "application/json", {}, data.str(), false);
   answer_sent_ = true;
+  http_error_response_ = true;
 
   finish_request(false, std::move(final_info));
 }
@@ -242,7 +248,11 @@ void ClientRunningRequest::finish_request(bool is_success,
     stats()->total_proxy_requests_time += run_time();
   }
 
-  callback_->receive_payload_part("", true);
+  if (is_success || http_error_response_) {
+    callback_->receive_payload_part("", true);
+  } else {
+    callback_->receive_error(td::Status::Error(ton::ErrorCode::notready, "upstream response failed"));
+  }
   payload_completed_ = true;
 
   td::actor::send_closure(client_runner_, &ClientRunner::finish_request, request_id_, proxy_);

@@ -61,10 +61,16 @@ class WorkerRunningRequest : public td::actor::Actor {
     }
   }
 
-  ton::tl_object_ptr<cocoon_api::proxy_queryFinalInfo> create_final_info();
+  ton::tl_object_ptr<cocoon_api::proxy_queryFinalInfo> create_final_info(bool success = true);
 
  private:
   std::string generate_worker_debug_inner();
+  td::Result<std::string> process_payload(td::Slice payload, bool completed);
+  void receive_http_error_payload(std::string payload, bool completed);
+  void send_processed_payload(std::string payload, bool completed);
+  td::int32 backend_status_{0};
+  std::vector<std::pair<std::string, std::string>> backend_headers_;
+  std::string error_body_;
   td::Bits256 proxy_request_id_;
   TcpClient::ConnectionId proxy_connection_id_;
   td::BufferSlice data_;

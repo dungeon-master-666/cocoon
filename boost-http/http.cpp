@@ -50,6 +50,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
     q_.clear();
     writing_ = false;
     finished_ = false;
+    aborted_ = false;
     header_sr_.reset();
 
     http::async_read(stream_, buffer_, req_,
@@ -170,6 +171,18 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
         }
       }
 
+      void receive_error(td::Status error) override {
+        if (already_completed_)
+          return;
+        already_completed_ = true;
+        already_started_ = true;
+        asio::post(strand_, [weak = self_]() {
+          if (auto self = weak.lock()) {
+            self->abort();
+          }
+        });
+      }
+
       ~Cb() {
         if (!already_started_) {
           already_started_ = true;
@@ -186,7 +199,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
           already_completed_ = true;
           asio::post(strand_, [weak = self_]() mutable {
             if (auto self = weak.lock()) {
-              self->finish();
+              self->abort();
             }
           });
         }
@@ -257,6 +270,14 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
     send_next_part();
   }
 
+  void abort() {
+    // Flush already queued body chunks, then close WITHOUT the final HTTP
+    // chunk. Consumers must observe a truncated response, not successful EOF.
+    aborted_ = true;
+    finished_ = true;
+    send_next_part();
+  }
+
   void write_completed(beast::error_code error, WriteType write_type) {
     writing_ = false;
 
@@ -303,6 +324,10 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
     }
 
     if (finished_) {
+      if (aborted_) {
+        close();
+        return;
+      }
       writing_ = true;
 
       asio::async_write(stream_, http::make_chunk_last(),
@@ -317,6 +342,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
     if (stream_.socket().shutdown(tcp::socket::shutdown_send, error).failed()) {
       LOG(ERROR) << "failed to close http socket: " << error.message();
     }
+    stream_.socket().close(error);
     self_ = nullptr;
   }
 
@@ -335,6 +361,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
   std::deque<std::shared_ptr<std::string>> q_;
   bool writing_{false};
   bool finished_{false};
+  bool aborted_{false};
   std::shared_ptr<HttpSession> self_;
 };
 

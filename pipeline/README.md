@@ -225,4 +225,4 @@ Backend запускается через `posix_spawn` в собственно�
 | `crash-after-ready` | Процесс выходит с кодом 23 после warmup |
 | `stubborn-child` | Создаётся потомок, игнорирующий SIGTERM |
 
-Пример добавления к runtime JSON: `"simulator": {"scenario": "warmup-hang"}`. Дополнительно запрос API может содержать dev-поле `simulator` с `fault` (`none`, `truncate`, `hang`, `http-error`, `error-event`) и `token_delay_ms` (0–1000). Эти сценарии нужны для будущих gate/integration tests и не исправляют отложенные шаги 3–5 существующего worker.
+Пример добавления к runtime JSON: `"simulator": {"scenario": "warmup-hang"}`. Дополнительно запрос API может содержать dev-поле `simulator` с `fault` (`none`, `truncate`, `hang`, `http-error`, `error-event`) и `token_delay_ms` (0–1000). Эти сценарии нужны для gate/integration tests и не заменяют отдельные проверки HTTP lifecycle и лимитов существующего worker в шагах 3–5.

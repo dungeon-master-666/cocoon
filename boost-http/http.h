@@ -16,6 +16,9 @@ class HttpRequestCallback {
                               std::vector<std::pair<std::string, std::string>> headers, std::string body_part = "",
                               bool is_completed = false) = 0;
   virtual void receive_payload_part(std::string body_part, bool is_completed) = 0;
+  // Exactly one terminal callback: completed=true OR receive_error. An error
+  // after headers must never be translated into a successful end of body.
+  virtual void receive_error(td::Status error) = 0;
 };
 
 class HttpCallback {

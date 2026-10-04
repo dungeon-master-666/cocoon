@@ -22,13 +22,24 @@ void WorkerUplinkMonitor::send_request() {
     void receive_answer(td::int32 status_code, std::string content_type,
                         std::vector<std::pair<std::string, std::string>> headers, std::string body_part = "",
                         bool is_completed = false) override {
-      scheduler_->run_in_context(
-          [&]() { td::actor::send_closure_later(self_, &WorkerUplinkMonitor::got_http_answer, status_code); });
+      status_code_ = status_code;
+      if (is_completed)
+        complete(status_code_);
     }
     void receive_payload_part(std::string body_part, bool is_completed) override {
+      if (is_completed)
+        complete(status_code_);
+    }
+    void receive_error(td::Status error) override {
+      complete(502);
     }
 
    private:
+    void complete(td::int32 code) {
+      scheduler_->run_in_context(
+          [&]() { td::actor::send_closure_later(self_, &WorkerUplinkMonitor::got_http_answer, code); });
+    }
+    td::int32 status_code_{502};
     td::actor::ActorId<WorkerUplinkMonitor> self_;
     td::actor::Scheduler *scheduler_;
   };

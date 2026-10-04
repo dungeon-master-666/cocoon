@@ -108,16 +108,26 @@ key-manager and router with fake TON, waits until the client sees an available
 worker, checks the selected responses, and stops all owned processes. It runs on
 native macOS and Linux without a VM, model download, GPU or real TON connection.
 It requires Python 3.10+, Go 1.18+ and the normal CMake/Ninja/C++ build dependencies
-(including Boost). Submodules must be initialized. With existing Cocoon binaries,
-add `--skip-build`; the Go backend is still rebuilt from the current source.
+(including Boost). Submodules must be initialized. The command also builds and
+runs `test-http-client` and `test-answer-postprocessor`, and builds `encrypt-message`.
+With all these binaries already built, add `--skip-build`; the Go backend is
+still rebuilt from the current source.
 If a sandbox cannot write the default Go cache, set `GOCACHE` to a writable
 absolute directory, for example `GOCACHE=/tmp/cocoon-go-cache`.
 
 The default scenario is `normal`: both `/v1/chat/completions` and `/v1/completions`
 are tested in JSON and SSE modes. Assertions cover content, incremental stream
-delivery, exactly one terminal event, and prompt/completion/cached/reasoning usage.
-Synthetic usage is fixed, not a tokenizer measurement. This step does not test
-GPU inference, hardware attestation or payment correctness.
+delivery, exactly one terminal event, prompt/completion/cached/reasoning usage,
+and encrypted requests/responses. Synthetic usage is fixed, not a tokenizer
+measurement. The harness sets the test worker coefficient to 1000 through its
+existing admin API: each successful request accounts for 134 adjusted tokens
+and a total cost of 268 at the fake-TON tariff. Failed requests account for zero.
+It checks worker/proxy statistics, both proxy balances, worker/client payment
+notifications, released reservations and one terminal result on all three roles.
+This verifies fake-TON accounting, not real on-chain settlement, GPU inference
+or hardware attestation. Encryption cases wait for the proxy to fetch the public
+fixture's private key from the local key manager; model readiness alone does not
+guarantee that fetch has completed.
 
 Faults are selected explicitly, without editing code:
 
@@ -137,6 +147,14 @@ python3 benchmark/smoke-local.py --build-dir build/local --skip-build --scenario
 | `disconnect-mid-stream` | Send two SSE content events, then break HTTP framing |
 | `incomplete-json` | Complete HTTP framing with an unfinished JSON object |
 | `incomplete-sse` | Complete HTTP framing without final SSE/usage events |
+| `invalid-json-tail`, `empty-json` | Complete HTTP framing with trailing garbage or no JSON body |
+| `json-error`, `sse-error` | HTTP 200 containing an explicit backend error; SSE includes usage first |
+| `malformed-sse`, `incomplete-event` | Invalid JSON or an unfinished SSE event after usage |
+| `disconnect-after-usage` | Break HTTP framing after valid usage, before `[DONE]` |
+| `disconnect-after-done` | Send `[DONE]`, then break HTTP framing before the final HTTP chunk |
+| `duplicate-done` | Two terminal SSE events |
+| `http-client-error`, `http-text-error`, `empty-http-error` | HTTP 400 JSON, HTTP 503 text, HTTP 503 empty body |
+| `no-content` | HTTP 204, which is not a valid inference JSON/SSE response |
 
 `all` runs every scenario in a fresh stack. Each run chooses unused loopback
 ports and a separate state directory. Existing processes, databases and
@@ -149,20 +167,20 @@ SIGINT/SIGTERM also trigger cleanup.
 The printed artifact directory is retained on success and failure. It contains
 build/launcher/backend logs, each runner's log, the rendered configs and databases,
 `stack/processes.json` (owned process IDs and ports), and each scenario's
-`result.json` (response, timings, assertions/limitations and cleanup result).
+`result.json` (response, timings, accounting deltas, terminal counters and cleanup
+result). `source-sha256.json` identifies the source files used for the checks.
 `--output-dir /absolute/new/directory` chooses a location; it must not already
 exist. Logs and responses contain only the synthetic test traffic. Remove the
 artifact directory when it is no longer needed.
 
-**Scope of fault results:** step 1 verifies fault injection and records the
-current response. The worker currently treats some truncated responses as a
-successful HTTP EOF; these cases are printed as `KNOWN LIMITATION` and recorded
-in `result.json`. Passing fault injection is not certification of error handling
-or billing. To make this limitation fail the test while implementing pipeline
-step 3, add `--strict-faults`:
+**Scope of fault results:** all 23 scenarios enforce correct termination and
+accounting. The old step-1 `KNOWN LIMITATION` allowance has been removed;
+`--strict-faults` is retained as a no-op compatibility option. Both worker and
+client binaries need the step-3 fix for an error after HTTP headers to reach the
+external caller as a truncated response. The proxy/TL contract is unchanged.
 
 ```bash
-python3 benchmark/smoke-local.py --skip-build --scenario disconnect-mid-stream --strict-faults
+python3 benchmark/smoke-local.py --skip-build --scenario disconnect-after-done
 ```
 
 For interactive development, `--local-all` also accepts `--local-run-dir` (a new
@@ -189,10 +207,11 @@ synthetic load-test endpoint, not an audio inference simulator.
 Additional regression checks:
 
 ```bash
-go test benchmark/server.go benchmark/server_test.go
+go test -race benchmark/server.go benchmark/server_test.go
 BUILD_DIR="$PWD/build/local" python3 test/test-local-stack.py -v
-cmake --build build/local --target test-answer-postprocessor
+cmake --build build/local --target test-answer-postprocessor test-http-client
 build/local/test-answer-postprocessor
+build/local/test-http-client
 ```
 
 The lifecycle suite covers signals, automatic builds, partial startup, a crashed

@@ -466,7 +466,7 @@ Gate получает локальный request ID и остаточный time
 
 ### 11.2 Что в текущем коде нужно изменить
 
-- [HttpClientSession::fail](/Users/ms/Developer/cocoon/boost-http/http-client.cpp:178) после headers вызывает `receive_payload_part("", true)`. [WorkerRunningRequest](/Users/ms/Developer/cocoon/runners/worker/WorkerRunningRequest.cpp:260) трактует такой callback как завершение. Добавляем отдельный error callback/result и проводим его до `send_error`; ошибка транспорта не может стать успешным EOF.
+- В шаге 3 [HttpClientSession::fail](/Users/ms/Developer/cocoon/boost-http/http-client.cpp) получил отдельный error callback, проведённый до `WorkerRunningRequest::send_error`. Раньше ошибка после headers вызывала `receive_payload_part("", true)` и ложный success. Исправлен также HTTP adapter в client: ошибка после начала ответа закрывает поток без финального HTTP chunk. Для этой сквозной гарантии нужны обновлённые worker/client; изменения proxy binary или TL-схемы не требуются.
 - `run_http_request` сейчас возвращает `void`. Добавляем cancel handle; request actor хранит его и закрывает HTTP session при timeout, group failure и потере соединения с proxy. Завершение/cancel/error должны быть идемпотентны.
 - `WorkerRunner` хранит registry активных request actors по connection/request ID для отмены при disconnect; локальный `receive_request` проверяет `is_disabled()`, а не полагается только на состояние выбора в proxy.
 - WorkerUplinkMonitor получает явный callback ошибки/timeout и всегда планирует следующую проверку. Readiness проверяется у gate, transport liveness и HTTP 200 не подменяют group state.
