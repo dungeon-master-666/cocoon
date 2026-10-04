@@ -1,0 +1,12 @@
+{
+  "profile": "sglang-qwen3-0.6b-dev-pp2-wg-v1",
+  "rank": 1,
+  "role": "member",
+  "group": {
+    "listen_port": 12310
+  },
+  "network": {
+    "underlay_ip": "192.168.100.13",
+    "peer_ip": "192.168.100.12"
+  }
+}

@@ -1,8 +1,8 @@
-# Pipeline-agent — supervisor, группа, WireGuard и HTTP gate
+# Pipeline-agent — supervisor, группа, WireGuard, HTTP gate и SGLang
 
-Агент реализован на C++ с `td::actor`, SHA-256 из `tdutils` и асинхронным HTTP-клиентом Boost.Beast. Он проверяет профиль, запускает локальный backend, выполняет health/warmup, следит за процессами и ограниченно останавливает их. Отдельный Python-процесс `simulator.py` предоставляет dev API через Unix socket. Python-зависимостей вне стандартной библиотеки нет.
+Агент реализован на C++ с `td::actor`, SHA-256 из `tdutils` и асинхронным HTTP-клиентом Boost.Beast. Он проверяет профиль, запускает локальный backend, выполняет health/warmup, следит за процессами и ограниченно останавливает их. Python helper и simulator используют стандартную библиотеку; реальный backend дополнительно требует закреплённый SGLang runtime.
 
-Без секции `group` агент работает как локальный supervisor шага 6: `LOCAL_READY` означает warmup **одного** симулятора, `group_ready=false`, `epoch=null`. С секцией `group` включается протокол шага 7: два агента согласуют конфигурацию по mutual TLS и переходят в `READY` после warmup обоих симуляторов. Профиль `simulator-dev-pp2-wg-v1` добавляет настоящий WireGuard и изоляцию сети в Linux, шаг 8. Секция `gate` у head подключает эту группу к одному Cocoon worker, шаг 9. Во всех этих режимах `hardware_attested=false`. Здесь нет распределённой математики, tensor RPC, GPU inference или аппаратной аттестации.
+Без секции `group` агент работает как локальный supervisor шага 6: `LOCAL_READY` означает warmup **одного** симулятора, `group_ready=false`, `epoch=null`. С секцией `group` включается протокол шага 7: два агента согласуют конфигурацию по mutual TLS и переходят в `READY` после проверок backend. Профиль `simulator-dev-pp2-wg-v1` добавляет настоящий WireGuard и изоляцию сети в Linux, шаг 8. Секция `gate` у head подключает эту группу к одному Cocoon worker, шаг 9. Адаптер SGLang шага 10 выполняет настоящую PP-генерацию на GPU через ту же группу и сеть. Во всех этих dev-режимах `hardware_attested=false`; аппаратной аттестации здесь нет.
 
 В целевом CVM deployment агент работает внутри **каждой** CVM. Head CVM содержит `worker-runner`, агент-координатор и rank 0 движка; member CVM — агент и rank 1. Отдельная CVM для координатора не нужна. Нативные проверки ниже запускают эти роли обычными процессами на Mac.
 
@@ -260,3 +260,58 @@ Backend запускается через `posix_spawn` в собственно�
 | `stubborn-child` | Создаётся потомок, игнорирующий SIGTERM |
 
 Пример добавления к runtime JSON: `"simulator": {"scenario": "warmup-hang"}`. Дополнительно запрос API может содержать dev-поле `simulator` с `fault` (`none`, `truncate`, `hang`, `http-error`, `error-event`, `oversized`) и `token_delay_ms` (0–1000). Эти сценарии нужны для gate/integration tests и не заменяют отдельные проверки HTTP lifecycle и лимитов существующего worker в шагах 3–5.
+
+## SGLang — шаг 10
+
+Профили `sglang-qwen3-0.6b-dev-pp2-wg-v1` и `sglang-qwen3-14b-dev-pp2-wg-v1`
+требуют Linux, двух GPU ranks и секций `group`/`network`. Примеры head/member:
+`profiles/sglang-qwen3-{0.6b,14b}-{head,member}.json`. Адреса в примерах относятся
+к тестовому стенду; выбирайте незанятые адреса своего underlay. Production executable
+отвергает эти dev-профили.
+
+Backend: SGLang `0.5.10.post1`, образ и модель закреплены в `Sglang.cpp` и
+`sglang-models.json`. PP=2, TP=1, BF16, одна последовательность, context 512–4096,
+без CPU weight offload, prefix cache и chunked prefill. Полный snapshot модели
+монтируется read-only в `/models/<model-name>/<revision>`; helper сверяет набор,
+размеры и SHA-256 файлов до запуска. CLI, environment и внутренний API endpoint
+не переопределяются runtime-конфигом.
+
+На каждом rank агент запускает `sglang-helper.py` внутри engine namespace от
+UID 65534, затем helper запускает SGLang. Head helper соединяет приватный Unix
+socket с `127.0.0.1:30000` движка. Member предоставляет только health socket.
+Доступны текстовые chat/completions, JSON/SSE, одна генерация; batches, `n > 1`
+и расширения маршрутизации/LoRA не поддерживаются. Административные endpoints
+движка через gate недоступны.
+
+Head warmup — короткая генерация через всю модель; member health сам по себе
+не подтверждает работоспособность PP. Helper определяет конец ответа по
+`Content-Length` либо завершающему chunk и trailers и сразу освобождает слот
+генерации; для ответа без явного framing требуется EOF. UDS disconnect до конца
+ответа закрывает upstream и отменяет свой `rid` через внутренний API.
+Ошибка подтверждения отмены
+вызывает отказ backend и перезапуск группы. Процессы SGLang, включая потомков,
+завершаются при управляемой остановке helper. Ограничение P7-02 на принудительную
+гибель самого агента остаётся в [плане](../pipeline-plan.md).
+
+Контрактные проверки на Mac:
+
+```bash
+python3 test/test-pipeline-sglang.py --build-dir build/local
+```
+
+GPU-приёмка на двух предварительно согласованных хостах из
+`experiments/gpu-pipeline/lab.json`:
+
+```bash
+python3 test/test-pipeline-sglang-gpu.py --prepare
+# Повтор без пересборки; текущие исходники должны совпадать с удалёнными:
+python3 test/test-pipeline-sglang-gpu.py
+```
+
+`--prepare` передаёт явный список исходников, собирает отдельный dev-образ и Cocoon.
+Тест занимает обе GPU, создаёт временные контейнеры/underlay, запускает реальные
+агенты и полный Cocoon с fake TON. По завершении останавливает свою группу,
+удаляет свои контейнеры и проверяет GPU/process/network cleanup. Существующие
+нагрузки должен заранее остановить владелец стенда; тест отвергает занятую GPU.
+Это dev-стенд без CVM/CC. Статус, результаты и границы проверки —
+[STEP10-REPORT.md](STEP10-REPORT.md).

@@ -149,7 +149,8 @@ void Agent::start_backend() {
       throw std::runtime_error("cannot prepare unprivileged backend directory");
     auto args = std::vector<std::string>{PIPELINE_SANDBOX, group_->network_namespace(), std::to_string(getpid())};
     args.insert(args.end(), plan_.argv.begin(), plan_.argv.end());
-    args.insert(args.end(), {"--overlay-ip", config_.rank == 0 ? "10.231.0.1" : "10.231.0.2"});
+    if (config_.profile.backend == "simulator")
+      args.insert(args.end(), {"--overlay-ip", config_.rank == 0 ? "10.231.0.1" : "10.231.0.2"});
     plan_.executable = PIPELINE_SANDBOX;
     plan_.argv = std::move(args);
 #else

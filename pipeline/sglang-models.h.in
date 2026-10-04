@@ -1,0 +1,2 @@
+#pragma once
+inline constexpr const char *sglang_models_json = R"models(@SGLANG_MODELS@)models";
