@@ -1,0 +1,8 @@
+ARG BASE
+FROM ${BASE}
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    cmake clang g++ make ninja-build autoconf automake libtool pkg-config libssl-dev zlib1g-dev \
+    libreadline-dev libmicrohttpd-dev libboost-thread-dev liblz4-dev python3 git \
+    iproute2 wireguard-tools nftables iputils-ping iputils-arping ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+ENTRYPOINT []

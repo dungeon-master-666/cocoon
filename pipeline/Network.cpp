@@ -29,6 +29,7 @@ void Network::start(const Json &roster, const NetworkKey &key) {
             {"private_key", key.private_key_base64()},
             {"underlay_ip", config_.network->underlay_ip},
             {"peer_ip", config_.network->peer_ip},
+            {"service_egress", config_.network->service_egress},
             {"owner_token", random_id()}};
   spawn_guardian(false);
 #endif

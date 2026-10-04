@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "mode": "dev",
+  "backend": "vllm",
+  "model": "large",
+  "hosts": [
+    {"id": "head", "hostname": "gpu-host-1", "interface": "eth0"},
+    {"id": "member", "hostname": "gpu-host-2", "interface": "eth0"}
+  ],
+  "ranks": [
+    {"host": "head", "underlay": "192.168.100.12/24", "cpus": "0-7", "memory_mib": 24576,
+     "gpu": "0000:01:00.0", "model_root": "/srv/cocoon-models"},
+    {"host": "member", "underlay": "192.168.100.13/24", "cpus": "0-7", "memory_mib": 24576,
+     "gpu": "0000:01:00.0", "model_root": "/srv/cocoon-models"}
+  ],
+  "startup_timeout": 900,
+  "limits": {"max_model_len": 4096, "max_num_seqs": 1, "max_num_batched_tokens": 4096},
+  "services": {"mode": "local-fake-ton", "coefficient": 1000}
+}

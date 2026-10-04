@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "mode": "dev",
+  "backend": "simulator",
+  "model": "simulator",
+  "hosts": [{"id": "vm", "hostname": "pipeline-vm", "interface": "eth0"}],
+  "ranks": [
+    {"host": "vm", "underlay": "192.168.100.12/24", "cpus": "0-1", "memory_mib": 1024},
+    {"host": "vm", "underlay": "192.168.100.13/24", "cpus": "2-3", "memory_mib": 1024}
+  ],
+  "startup_timeout": 90,
+  "services": {"mode": "local-fake-ton", "coefficient": 1000}
+}

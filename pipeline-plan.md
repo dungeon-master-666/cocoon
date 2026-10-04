@@ -136,7 +136,7 @@ python3 experiments/gpu-pipeline/pilot.py matrix
 | P3-01 — за пределами текстового pipeline MVP, до квалификации audio backend | **Полный контракт audio inference и его billing.** Общий обработчик сохраняет `transcript.text.done` для существующего audio endpoint; фрагментация, шифрование и отсутствие premature terminal проверены unit-тестами. Это не проверка реального audio backend. Поля `input_tokens`/`output_tokens` или duration billing не сопоставлены с расчётным usage Cocoon. | Если audio включается в поддерживаемый deployment, нужен отдельный этап с закреплённым backend и схемой usage. Приёмка: multipart запрос через Cocoon, обычный и зашифрованный JSON/SSE, полный набор ошибок/обрывов и проверка ненулевой корректной оплаты успешного audio запроса. Шаги 10–11 сейчас квалифицируют text API. |
 | P3-02 — открыто, до гарантии готовности encrypted API сразу после старта/ротации | **Доступность ключа и readiness — разные состояния.** В локальном стенде модель становится доступна раньше, чем proxy получает ключ от key manager; запрос в этом окне получает `unknown public key`. Тест ждёт фактической загрузки ключа, а не исправляет readiness общей системы. | Предусмотреть отдельную задачу общего Cocoon readiness/объявления encryption keys, согласовать с P7-03 при ротации. Приёмка: задержка/отказ key manager, cold start и ротация; объявленная готовность encrypted API соответствует ключам, доступным обслуживающему proxy. Не путать с readiness самой pipeline-группы в шаге 9. |
 
-**Осознанные границы проверки:** fake-TON и синтетический backend на Mac; настоящие TON settlement, GPU/CC и group failure этим шагом не проверяются. Оплата частичного неуспешного ответа намеренно равна нулю. Для сквозного HTTP failure нужны обновлённые worker и client; старый client по-прежнему может закончить HTTP нормально после TL error. TL-схема и proxy binary не изменены. Открытые P7-01…P7-05 и P8-01/P8-02 сохраняются.
+**Осознанные границы проверки:** fake-TON и синтетический backend на Mac; настоящие TON settlement, GPU/CC и group failure этим шагом не проверяются. Оплата частичного неуспешного ответа намеренно равна нулю. Для сквозного HTTP failure нужны обновлённые worker и client; старый client по-прежнему может закончить HTTP нормально после TL error. TL-схема и proxy binary не изменены. Актуальные статусы P7-01…P7-05 и P8-01/P8-02 указаны в таблицах шагов 7–8; P7-02 и P8-01/P8-02 впоследствии закрыты dev deployment шага 12.
 
 ### Шаг 4. Отмена и deadlines
 
@@ -163,7 +163,7 @@ python3 experiments/gpu-pipeline/pilot.py matrix
 | P4-01 — за пределами MVP, вернуться при требовании немедленной отмены внешним клиентом | **Сквозной request cancel client → proxy → worker.** Закрытие HTTP внешним клиентом не передаёт отдельный сигнал отмены по текущему TL. Worker реагирует на собственный deadline или потерю proxy connection; простое прекращение чтения клиентом не обещает немедленного освобождения backend. | Отдельное изменение общего протокола с согласованием версий и request identity. Приёмка: внешний disconnect до/после headers и во время streaming, cancel/completion races, повторная отмена, нулевой billing неуспеха, наблюдаемое освобождение backend/GPU без ожидания исходного deadline. |
 | P4-02 — открыто, до гарантии восстановления платного сервиса после аварийного restart proxy | **Reconciliation оплаты при crash до сохранения последнего баланса.** Первый fault-прогон воспроизвёл незавершённый `worker_extendedCompareBalanceWithProxy` в существующем proxy: `skipping extended tokens compare: not implemented yet`, затем `Wrong constructor found at 4`; worker не возвращается в ready. Отмена запросов при этом уже сработала. Успешный тест restart в шаге 4 явно ждёт подтверждённого сохранения баланса и не закрывает этот разрыв. | Выделить задачу общего Cocoon accounting/recovery до заявления production-ready платного восстановления, согласовать с проверками restart в шаге 13. Приёмка: crash до/во время/после DB flush и acknowledgement, повторный handshake, сверка балансов worker/client/proxy, отсутствие потери и двойного списания, восстановление readiness. Простого исправления перехода handshake state недостаточно без восстановления данных оплаты. |
 
-**Осознанные границы проверки:** нативный Mac, числовой loopback endpoint, synthetic requests и fake-TON; не аппаратная конфиденциальность и не on-chain settlement. Ограниченное время cleanup предполагает работающие scheduler/event loop, не hard real-time при перегрузке/остановке процесса. После падения proxy проверяются живой worker и backend; полное состояние погибшего proxy не объявляется проверенным. Оплата частичного неуспешного ответа по-прежнему равна нулю. Открытые P3-01/P3-02, P7-01…P7-05 и P8-01/P8-02 сохраняются.
+**Осознанные границы проверки:** нативный Mac, числовой loopback endpoint, synthetic requests и fake-TON; не аппаратная конфиденциальность и не on-chain settlement. Ограниченное время cleanup предполагает работающие scheduler/event loop, не hard real-time при перегрузке/остановке процесса. После падения proxy проверяются живой worker и backend; полное состояние погибшего proxy не объявляется проверенным. Оплата частичного неуспешного ответа по-прежнему равна нулю. P3-01/P3-02 и production-ограничения P7 сохраняют свои статусы; P7-02 и P8-01/P8-02 впоследствии закрыты dev deployment шага 12.
 
 ### Шаг 5. Ограничение буферов
 
@@ -226,7 +226,7 @@ python3 test/test-pipeline-group.py --build-dir build/local
 | ID / статус | Что осталось и почему это важно | Где предусмотреть и чем подтвердить завершение |
 |---|---|---|
 | P7-01 — открыто, обязательно до confidential production | **Настоящая цепочка доверия CVM/GPU/model.** Сейчас production policy запрещает все подключения, а dev evidence синтетическое. Нет разрешённого production profile, подключения реального verifier к агенту, проверки GPU и фактически открытой модели перед участием в группе. | Раздел 6 и [Gate E](pipeline-design.md#gate-e--обязательная-проверка-confidential-production) уже обозначают направление, но нужен отдельный план реализации production image/spec, TDX verifier, collateral/image policy, GPU attestation и model verification. Приёмка: две настоящие CVM с CC GPU, совпадение разрешённых measurements/model roots, отказ для dev evidence и неверных GPU/model/image, повторная проверка после GPU reset/перезапуска backend и проверка всего confidential пути для каждого backend profile. |
-| P7-02 — открыто, обязательно до приёмки VM deployment | **Cleanup после гибели самого агента.** В шаге 7 POSIX process group очищается живым supervisor. WG-профиль шага 8 добавляет owner-pipe для сетевого helper и `PDEATHSIG` для непосредственного backend; это не доказывает остановку всех потомков, включая покинувших process group, или cleanup при одновременной гибели агента и helper. | При детализации шага 12 добавить явное владение backend/helper через systemd/cgroup и cleanup сетевых ресурсов внешним supervisor. В текущем шаге 12 нет отдельного критерия отказа самого агента. Приёмка: SIGKILL head/member agent, остановка всего дерева backend/helper, очистка namespaces/interfaces и запрет нового запуска, пока предыдущий cleanup не подтверждён. Проверка SIGKILL helper живым агентом в шаге 8 закрывает только часть этой работы. |
+| P7-02 — закрыто в шаге 12, dev-MVP | **Cleanup после гибели агента и внешнего supervisor.** Реализованы systemd owner, отдельная контейнерная cgroup, private PID namespace, ExecStopPost и resource leases. | [Приёмка шага 12](pipeline/STEP12-REPORT.md): SIGKILL head/member agent, одновременный SIGKILL agent/guardian, процесс вне process group, SIGKILL host supervisor, подтверждённая очистка cgroup/interfaces/namespaces и запрет запуска с удержанным lease. GPU-прогоны обоих backend подтверждают освобождение устройств и повторный запрос после развёртывания. |
 | P7-03 — открыто, обязательно до длительной production-эксплуатации | **Плановое обновление удостоверений с drain.** Сейчас приближение expiry закрывает TLS-сессию и запускает общий путь отказа/retry; отдельного DRAINING нет. Даже штатная ротация расходует общий лимит двух повторных попыток. Автовыдача dev-сертификата не заменяет обновление удостоверения с настоящей аттестацией. | Предусмотреть отдельную задачу после появления gate в шаге 9 и связать с P7-01. Реализовать отдельный certificate base, обновление attestation/ключей между epoch и ограниченный drain активных запросов. Приёмка: несколько последовательных ротаций без исчерпания бюджета аварийных retries, новые запросы закрыты на drain, старые завершены или отменены по deadline, просроченная identity не продолжает работу. Требование описано в разделах 6 и 10 дизайна, но не выделено в критерии шагов 1–13. |
 | P7-04 — открыто, обязательно до confidential production | **Отзыв доверия во время работы группы.** Проверка сертификата при handshake и его expiry не обрабатывают последующий отзыв разрешённого image/model или ужесточение доверенной policy. | Добавить отдельную задачу обновления policy и остановки затронутой группы; сейчас она есть в разделе 10 дизайна, но не в нумерованных шагах. Приёмка: отзыв во время READY закрывает admission и текущую группу, дальнейшие сообщения по старой session не сохраняют допуск; восстановление возможно только после повторной проверки по актуальной policy. |
 | P7-05 — за пределами первого MVP, отдельное решение | **Более двух участников.** Текущий профиль и протокол реализованы для head + одного member; произвольное N не поддерживается. Общая архитектура в дизайне не является готовой реализацией. | Если потребуется N > 2, добавить отдельный этап: roster и control-соединения для N ranks, сбор Prepared/readiness от всех, настройка связности движка и согласованная остановка. Приёмка: минимум три участника, отказ любого rank и отсутствие запуска/READY при неполном составе; затем настоящий PP=N на GPU. Для первого PP=2 MVP это не блокирующее требование. |
@@ -255,16 +255,16 @@ sudo python3 test/test-pipeline-network.py --build-dir /opt/cocoon-build
 
 **Уже покрыто следующими шагами:** gate и закрытие admission/активных запросов Cocoon — шаг 9 с проверкой member failure во время streaming; настоящий SGLang/vLLM, CUDA/NCCL и warmup всей модели — шаги 10–11 на двух RTX; VM images, запуск контейнеров в подготовленной сети и GPU device ownership — шаг 12; длительная нагрузка, LAN throughput/MTU и производительность — шаг 13. `READY` сетевого simulator не подтверждает эти возможности. Confidential production остаётся отдельной работой P7-01 и Gate E.
 
-**Открытые записи прошлых шагов:** P7-02 остаётся открытой, несмотря на добавленные owner-pipe, `PDEATHSIG` и recovery helper: нет внешнего systemd/cgroup supervisor, подтверждающего очистку всего дерева после гибели агента. P7-03 и P7-04 также не закрываются обычной сменой ключей при аварийном restart: плановый drain/rotation и live revocation ещё нужны. P7-05 сохраняет границу PP=2.
+**Актуальные записи прошлых шагов:** P7-02 закрыта внешним systemd/cgroup supervisor и приёмкой шага 12. P7-03 и P7-04 остаются открытыми: плановый drain/rotation и live revocation не заменяются аварийным restart. P7-05 сохраняет границу PP=2.
 
 **Новые работы без конкретных задач и критериев в текущем плане:**
 
 | ID / статус | Что осталось и почему это важно | Где предусмотреть и чем подтвердить завершение |
 |---|---|---|
-| P8-01 — открыто, до интеграции полного worker в Linux и приёмки deployment | **Сетевая policy служебных соединений CVM.** Текущий dev-профиль допускает между underlay только peer control/WireGuard и loopback. Полный worker дополнительно использует Cocoon uplinks/TON, а подготовка образа/модели может требовать других соединений. Их допустимые адреса, фазы открытия и привязка к trusted profile в шагах 9/12 не определены. Нельзя исправлять это общим разрешением исходящего трафика или доступом backend к underlay. | При детализации шагов 9 и 12 составить список необходимого agent/worker egress и правила для каждого profile; отделить подготовку артефактов от обслуживания запросов. Приёмка: полный запрос через Cocoon при default drop, работа требуемых служебных соединений и отрицательные проверки остальных направлений, engine остаётся только на overlay. |
-| P8-02 — открыто, до приёмки VM deployment | **Разделение прав сервисов и упаковка sandbox в image.** Сейчас dev-агент/helper работают от root, backend — UID 65534, filesystem общий, пути Python/helpers закреплены при CMake configure. Нет готового набора service users/groups, mount/PID/device restrictions и прав на UDS для реального gate/контейнеров. Одна проверка сетевого namespace не подтверждает полную изоляцию deployment. | Детализировать шаг 12 совместно с P7-02, а production image — с P7-01. Приёмка: все процессы реального backend/API helper находятся в нужной network namespace/cgroup; backend не получает underlay FD, runtime socket или привилегии смены сети; только нужные службы могут открыть UDS; helpers и инструменты входят в закреплённый image, запуск не зависит от writable checkout. |
+| P8-01 — закрыто в шаге 12 для dev profile | **Сетевая policy служебных соединений.** Подготовка образа/модели отделена от serving; default-drop действует до старта агента и между epoch. Только service UID 10001 получает явно заданные proxy/KM TCP endpoints; engine остаётся на overlay. | [Приёмка шага 12](pipeline/STEP12-REPORT.md): полный plaintext и encrypted Cocoon-запрос с внешними dev proxy/key-manager, проверка разрешённых портов и запрета других портов/UID/доступа engine к underlay. Production TON egress и confidential image требуют отдельного profile в P7-01/разделе 6. |
+| P8-02 — закрыто в шаге 12 для dev deployment | **Разделение прав и упаковка runtime.** Helpers/tools установлены в pinned image; private PID/mount/device boundaries, service UID/GID 10001, backend UID/GID 65534 без capabilities, NoNewPrivs и закрытые UDS. | [Приёмка шага 12](pipeline/STEP12-REPORT.md): проверены реальные процессы SGLang/vLLM и API helper, их namespace/cgroup/FD; backend не получает underlay IP/network-namespace FD или runtime socket, service UID не обходит gate через UDS. Исходники не монтируются. Production CVM image остаётся P7-01. |
 
-**Осознанные ограничения MVP:** фиксированные два rank, IPv4 LAN endpoints, MTU 1320 у simulator-профиля, без NAT traversal, discovery, IPv6 и динамического изменения состава. Для расширения этих условий нужны отдельное решение и проверки. GPU/CC не проверяются сетевым VM-тестом. Неподтверждённый cleanup завершает агент с ошибкой; автоматическая починка VM после такого отказа пока относится к внешнему deployment supervisor, P7-02.
+**Осознанные ограничения MVP:** фиксированные два rank, IPv4 LAN endpoints, MTU 1320 у simulator-профиля, без NAT traversal, discovery, IPv6 и динамического изменения состава. Для расширения этих условий нужны отдельное решение и проверки. GPU/CC не проверяются сетевым VM-тестом. Неподтверждённый cleanup завершает агент с ошибкой; внешний supervisor шага 12 выполняет cleanup, сохраняя lease и запрет нового запуска при неподтверждённом результате (P7-02).
 
 ### Шаг 9. Один pipeline worker в Cocoon
 
@@ -282,13 +282,13 @@ sudo python3 test/test-pipeline-network.py --build-dir /opt/cocoon-build
 
 **Уже покрыто следующими шагами:** полный предел памяти/очередей worker → proxy и actor mailbox, slow-consumer нагрузка — шаг 5; настоящая PP-математика, API конкретных SGLang/vLLM, общий warmup и фактическое освобождение GPU/KV — шаги 10–11; per-host bundles, service users/cgroups, images и размещение — шаг 12; длительная GPU-нагрузка и производительность — шаг 13. Gate имеет собственные лимиты и последовательную пересылку chunks, но не закрывает требования шага 5 ко всему transport пути.
 
-**Открытые записи предыдущих шагов:** P8-01 сохраняется: Linux-тест использует Cocoon services через loopback внутри head underlay namespace; внешний Cocoon/TON egress CVM этим не квалифицирован. P8-02 сохраняется для локального gate/UDS, прав сервисов и упаковки sandbox: служебные HTTP headers не аутентифицируют произвольный guest-процесс. P7-02 сохраняется для cleanup при гибели самого агента/cgroup. P3-01/P3-02, P4-01/P4-02 и P7-01/P7-03…P7-05 также остаются открытыми либо за пределами MVP согласно их статусам; новый epoch не закрывает reconciliation proxy, ротацию и production attestation.
+**Актуальные записи предыдущих шагов:** P7-02, P8-01/P8-02 закрыты для dev deployment в шаге 12, включая внешний dev service egress и права/упаковку. Production TON/CVM policy относится к P7-01. P3-01/P3-02, P4-01/P4-02 и P7-01/P7-03…P7-05 сохраняют статусы своих таблиц; новый epoch не закрывает reconciliation proxy, ротацию и production attestation.
 
 **Новая работа без конкретных задач и критериев в текущем плане:**
 
 | ID / статус | Что осталось и почему это важно | Где предусмотреть и чем подтвердить завершение |
 |---|---|---|
-| P9-01 — открыто, до приёмки deployment | **Совместная валидация настроек worker и pipeline-agent.** Общий digest связывает агентов, но model name, `max_active_requests` и коэффициент worker пока задаются отдельно. Тест и инструкция явно используют согласованное API-имя; gate ограничивает concurrency своим profile. Неправильно собранный bundle может рекламировать другую модель или лишнюю capacity, получая ошибки на запросах вместо раннего отказа настройки. | При детализации шага 12 добавить единую генерацию/проверку этих настроек и привязку forwarding endpoint к выбранному gate. Приёмка: согласованный bundle публикует одну правильную модель и capacity; ошибочные model/endpoint/лимиты отклоняются до объявления готовности. Политика цены на всю группу задаётся явно, без автоматического умножения usage на ranks. |
+| P9-01 — закрыто в шаге 12 | **Совместная валидация worker и pipeline-agent.** Model, capacity, forwarding gate endpoint и коэффициент цены выводятся из одной конфигурации; общий deployment ID связывает оба rank и точный image/tooling. | [Приёмка шага 12](pipeline/STEP12-REPORT.md): bundle tests отклоняют ошибочные model/endpoint/лимиты/цену даже после пересчёта file hashes; VM/GPU публикуют согласованную модель и обслуживают запросы. Цена относится ко всему worker, usage не умножается на rank count. |
 
 **Осознанные границы MVP и проверки:** два simulator rank, без реальной математики и GPU/KV; чистое состояние подтверждено новым epoch, новыми процессами и нулевыми synthetic reservations. Native-профиль моделирует сеть; Linux-профиль использует реальный WireGuard между двумя namespace в одной VM. Это не проверка двух CVM, удалённого production proxy или аппаратной конфиденциальности. Backend crash обнаруживается раньше молчащего control peer; для последнего действуют control/lease deadlines. Disabled в proxy распространяется polling, а gate закрывает admission самостоятельно. Автоматических повторов inference нет.
 
@@ -306,7 +306,7 @@ sudo python3 test/test-pipeline-network.py --build-dir /opt/cocoon-build
 
 **Уже запланировано:** vLLM и его отдельная квалификация — шаг 11; воспроизводимые per-host bundles — шаг 12; длительная серия, измерения TTFT/throughput и сравнительный benchmark обоих backend — шаг 13. Ограничение очередей всего Cocoon-пути остаётся в отложенном шаге 5: bounded buffers SGLang helper не заменяют его.
 
-**Открытые работы прежних шагов сохраняются:** P7-02 — внешний supervisor/cgroup при гибели самого агента; P8-01/P8-02 — внешний service egress, права/UDS/device/PID/mount policy и упаковка helpers в image; P9-01 — совместная валидация worker/agent model и capacity. Cleanup дерева SGLang живым helper закрывает управляемую остановку backend, но не сценарий одновременной гибели agent/helper. P4-01 по-прежнему ограничивает отмену внешним клиентом: здесь проверяются disconnect на gate и deadline worker, отдельного TL cancel не добавлено. P3-02, P4-02 и P7-01/P7-03/P7-04 также остаются открытыми; новая интеграция не исправляет общий encryption readiness, proxy billing recovery, аттестацию, ротацию и отзыв доверия.
+**Актуальные работы прежних шагов:** P7-02, P8-01/P8-02 и P9-01 закрыты для dev deployment в шаге 12. P4-01 по-прежнему ограничивает отмену внешним клиентом: проверяются disconnect на gate и deadline worker, отдельного TL cancel не добавлено. P3-02, P4-02 и P7-01/P7-03/P7-04 остаются открытыми: encryption readiness, proxy billing recovery, аттестация, ротация и отзыв доверия требуют отдельной работы.
 
 **Осознанные границы MVP:** два rank, одна последовательность, BF16, context до 4096, только закреплённые Qwen3 text profiles. LoRA, batching/несколько outputs, другие модели/версии, quantization, prefix cache, CUDA graphs и overlap требуют отдельной квалификации и решения о включении. Тестовый dev-образ и обычные RTX не подтверждают CVM/CC-конфиденциальность; модели проверяются SHA-256 на read-only mount, но production chain of trust остаётся P7-01. GPU-прогоны использовали context=4096 и проверяли реальный KV cleanup; это не длительная нагрузка и не performance benchmark.
 
@@ -326,7 +326,7 @@ sudo python3 test/test-pipeline-network.py --build-dir /opt/cocoon-build
 
 **Уже запланировано:** воспроизводимые bundles/deployment — шаг 12; длительная нагрузка и сравнительный benchmark обоих backend — шаг 13; ограничения очередей всего Cocoon transport — отложенный шаг 5. Отдельная GPU-приёмка vLLM текущего шага выполнена; длительная нагрузка ею не заменяется.
 
-**Открытые работы сохраняются:** P7-02 — внешний supervisor/cgroup при гибели agent/helper; P8-01/P8-02 — service egress, права и упаковка; P9-01 — единая валидация worker/agent model и capacity. P4-01/P4-02, P3-02 и P7-01/P7-03/P7-04 сохраняют прежние ограничения внешней TL-отмены, reconciliation, encryption readiness, production trust и ротации. Общая группа и новый adapter их не закрывают.
+**Актуальные работы прежних шагов:** P7-02, P8-01/P8-02 и P9-01 закрыты приёмкой dev deployment шага 12. P4-01/P4-02, P3-02 и P7-01/P7-03/P7-04 сохраняют ограничения внешней TL-отмены, reconciliation, encryption readiness, production trust и ротации.
 
 **Осознанные границы MVP:** два rank, один запрос, BF16, context до 4096, закреплённые Qwen3 text profiles и vLLM 0.29.0+cu129. Headless member не имеет HTTP health/metrics: полную модель проверяет генерация head, а логические KV-блоки всего PP учитывает общий scheduler на head. Физическое освобождение памяти проверяется остановкой обоих ranks. Другие модели, concurrency, LoRA, quantization и оптимизации требуют отдельной квалификации и решения о scope. RTX dev-стенд не подтверждает confidential production.
 
@@ -334,11 +334,54 @@ sudo python3 test/test-pipeline-network.py --build-dir /opt/cocoon-build
 
 ### Шаг 12. Воспроизводимый deployment
 
+**Статус: выполнен (2026-10-05), dev deployment.** Генератор per-host bundles,
+закреплённые образы, Linux systemd/cgroup supervisor и команды запуска/остановки
+проверены в VM и отдельно на SGLang/vLLM с Qwen3-14B на двух RTX. Прошли
+10 нативных bundle tests, C++ contracts, 16 VM-проверок, по 6 GPU-проверок,
+17 групп worker regression и 8 API-вариантов обычного worker smoke. После cleanup
+обе GPU используют 2 MiB, контейнеров/leases/GPU-процессов deployment нет.
+Инструкция — [DEPLOYMENT.md](pipeline/DEPLOYMENT.md), версии, команды, результаты
+и неуспешные промежуточные попытки — [STEP12-REPORT.md](pipeline/STEP12-REPORT.md).
+
 **Изменение для ревью:** генерация per-host bundles с profiles, одинаковыми artifacts, endpoints, ресурсами и командами запуска. Обработка частичного запуска и остановки. Для MVP — явный dev-режим; ручной запуск bundle на каждом хосте достаточен.
 
 **Проверка:** Linux VM с симулятором, затем две RTX. Чистое развёртывание по инструкции; неверный artifact/endpoint; частично стартовавшая группа; повторный запуск и cleanup. Placement одной или нескольких машин использует общие agent/adapters.
 
 **Готово, когда:** стенд воспроизводимо запускается без ручной правки внутреннего кода, ошибки диагностируются, cleanup затрагивает ресурсы соответствующей группы. При VM-тестах используются инструкции passthrough из раздела 2; device ownership согласован с выбранным способом запуска.
+
+**Обязательные работы из прежних шагов:** P7-02 — внешний systemd/cgroup owner,
+SIGKILL head/member agent и supervisor, остановка всех потомков (включая вышедших
+из process group), очистка interfaces/namespaces и запрет повторного использования
+ресурсов до подтверждённого cleanup. P8-01 — подготовка artifacts отдельно от
+serving, явный список service egress при default drop, полный Cocoon-запрос с
+внешними dev proxy/key-manager и отрицательные проверки прочих направлений.
+P8-02 — упакованные helpers/tools, private PID/mount/device boundaries, service
+UID/GID, права на UDS и подтверждённые network namespace/cgroup backend/API helper;
+runtime не зависит от writable checkout и не получает Docker socket/underlay FD.
+P9-01 — одна генерация model/capacity/forward endpoint/цены worker и agent,
+отклонение несогласованных настроек до readiness, без умножения цены/usage на ranks.
+P7-02/P8-01/P8-02/P9-01 закрыты описанной приёмкой в рамках dev-MVP.
+
+#### За скобками реализации шага 12
+
+**Уже запланировано:** отложенный шаг 5 — ограничения очередей всего Cocoon-пути,
+обязательные перед нагрузкой; шаг 13 — длительная серия, TTFT/inter-token latency,
+throughput и издержки WireGuard для обоих backend.
+
+**Открытые работы сохраняются:** P3-02, P4-01/P4-02 и P7-01/P7-03/P7-04 —
+encryption readiness, внешняя TL-отмена, reconciliation, production chain of trust,
+аттестация, ротация и отзыв доверия. Настоящий TON/service egress и confidential
+image/profile требуют детализации production-этапа в разделе 6; dev fixture не
+подтверждает эти свойства.
+
+**Осознанные границы MVP:** два rank, IPv4 LAN, закреплённые Qwen3 profiles, одна
+GPU-последовательность, ручной запуск per-host bundle. Проверены simulator в Linux
+VM и GPU на bare metal; GPU passthrough в VM описан в разделе 2, но этим прогоном
+не квалифицирован. Dev-контейнеры не обеспечивают аппаратную конфиденциальность
+и не заменяют CVM provisioner. Другие модели, batching, LoRA, quantization,
+оптимизации и production orchestration требуют отдельного решения о scope.
+
+**Новых работ вне плана не выявлено.** Ссылки и статусы прежних записей сохранены.
 
 ### Шаг 13. Приёмка MVP
 
@@ -372,10 +415,10 @@ sudo python3 test/test-pipeline-network.py --build-dir /opt/cocoon-build
 ## 5. Порядок и промежуточные результаты
 
 1. Начать с локального стенда и раннего GPU-эксперимента, шаги 1–2. Если вычислительная основа не работает, скорректировать profile/дизайн до крупной интеграции.
-2. Шаги 3–4 и 6–11 выполнены. Шаг 5 остаётся отложенным и обязателен перед нагрузочными испытаниями и приёмкой MVP в шаге 13. Стенд шага 1 проверяет HTTP-исправления, шаг 9 добавил сквозные сценарии группы, шаги 10–11 — реальные SGLang и vLLM PP=2 через Cocoon на двух RTX. Перед deployment учесть открытые P8-01/P8-02, P7-02 и P9-01; P3-01/P3-02 сохраняют границы API/readiness, P4-01/P4-02 — сквозной отмены и восстановления расчётов.
+2. Шаги 3–4 и 6–11 выполнены. Шаг 5 остаётся отложенным и обязателен перед нагрузочными испытаниями и приёмкой MVP в шаге 13. Стенд шага 1 проверяет HTTP-исправления, шаг 9 добавил сквозные сценарии группы, шаги 10–11 — реальные SGLang и vLLM PP=2 через Cocoon на двух RTX. Deployment шага 12 закрывает P8-01/P8-02, P7-02 и P9-01 для dev-MVP; P3-01/P3-02 сохраняют границы API/readiness, P4-01/P4-02 — сквозной отмены и восстановления расчётов.
 3. Шаги 6–9 дают группу с simulator и полный Cocoon-сценарий, проверяемый без GPU. WireGuard проверяется в Linux VM.
 4. SGLang подключён и проверен в шаге 10, vLLM — в шаге 11. Оба используют общую логику группы и результаты раннего эксперимента.
-5. Шаги 12–13 превращают стенд в воспроизводимый функциональный MVP.
+5. Шаг 12 выполнен: стенд воспроизводимо разворачивается. Шаг 13 завершает приёмку функционального MVP после отложенного шага 5.
 
 Основные рубежи: после шага 2 подтверждена вычислительная основа; после шага 9 полный Cocoon-сценарий работает с симулятором; после шагов 10–11 работают реальные backend; после шага 13 принят функциональный MVP.
 
@@ -383,6 +426,6 @@ sudo python3 test/test-pipeline-network.py --build-dir /opt/cocoon-build
 
 Настоящие TDX/GPU attestation и квалификация confidential deployment выполняются отдельным этапом на подходящем CC-стенде согласно Gate E в техническом дизайне. Потребуются production image/spec, проверка полного GPU ↔ private RAM ↔ WireGuard пути, отказов и производительности для каждого backend profile.
 
-Этот раздел задаёт направление, но ещё не является подробным планом реализации production-поддержки. При его детализации обязательно учесть открытые записи P7-01, P7-03 и P7-04; P7-02 должен быть закрыт уже к приёмке VM deployment. Наличие этого раздела не означает, что шаги 1–13 автоматически реализуют перечисленное.
+Этот раздел задаёт направление, но ещё не является подробным планом реализации production-поддержки. При его детализации обязательно учесть открытые записи P7-01, P7-03 и P7-04; P7-02 закрыт приёмкой dev deployment в шаге 12. Наличие этого раздела не означает, что шаги 1–13 автоматически реализуют перечисленное.
 
 До этой проверки dev-стенд не публикуется как confidential worker. Протокол группы и backend adapters должны переиспользоваться; разделение dev/production policies, заложенное в шагах 6–7, позволяет добавить настоящую аттестацию без переработки управления группой.

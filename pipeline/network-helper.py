@@ -20,11 +20,19 @@ import sys
 import time
 
 IP, WG, NFT = '/usr/sbin/ip', '/usr/bin/wg', '/usr/sbin/nft'
+NSENTER = '/usr/bin/nsenter'
 OWNERS = '/run/cocoon-pipeline-net'
 STOP = False
 
 
 def command(args, data=None):
+    # ip's namespace switch also remounts sysfs, which requires the host PID
+    # namespace on some nested/container kernels. Only switch network namespace;
+    # retain the private PID/mount namespace and the existing read-only sysfs.
+    if args[:2] == [IP, '-n']:
+        args = [NSENTER, '--net=/run/netns/' + args[2], IP, *args[3:]]
+    elif args[:3] == [IP, 'netns', 'exec']:
+        args = [NSENTER, '--net=/run/netns/' + args[3], *args[4:]]
     try:
         result = subprocess.run(args, input=data, text=True, capture_output=True, timeout=1.5, check=False)
     except subprocess.TimeoutExpired:
@@ -71,6 +79,17 @@ class Network:
         self.peer = cfg['roster'][1-self.rank]
         self.underlay = str(ipaddress.IPv4Address(cfg['underlay_ip']))
         self.endpoint = str(ipaddress.IPv4Address(cfg['peer_ip']))
+        self.service_egress = cfg.get('service_egress', [])
+        if not isinstance(self.service_egress, list) or len(self.service_egress) > 8 or (self.rank != 0 and self.service_egress):
+            raise ValueError('invalid service egress')
+        for entry in self.service_egress:
+            if not isinstance(entry, dict) or set(entry) != {'ip', 'port'}:
+                raise ValueError('invalid service endpoint')
+            ip = ipaddress.IPv4Address(entry['ip'])
+            if (str(ip) != entry['ip'] or ip.is_loopback or ip.is_multicast or ip.is_unspecified or
+                    str(ip) == '255.255.255.255' or ip in ipaddress.ip_network('10.231.0.0/24') or
+                    type(entry['port']) is not int or not 1 <= entry['port'] <= 65535):
+                raise ValueError('invalid service endpoint')
         self.overlay = self.self['overlay_ip']
         self.remote = self.peer['overlay_ip']
         self.public = base64.b64encode(bytes.fromhex(self.self['network_key'])).decode()
@@ -156,6 +175,12 @@ add rule inet {self.table} input ip saddr {self.endpoint} ip daddr {self.underla
 add rule inet {self.table} output ip saddr {self.underlay} ip daddr {self.endpoint} tcp dport 12310 accept
 add rule inet {self.table} output ip saddr {self.underlay} ip daddr {self.endpoint} tcp sport 12310 ct state established accept
 '''
+        # Only the dedicated Cocoon service UID may use these explicit TCP
+        # destinations. The backend remains in its separate overlay namespace.
+        for entry in self.service_egress:
+            ip, port = entry['ip'], entry['port']
+            underlay += f'add rule inet {self.table} output meta skuid 10001 ip daddr {ip} tcp dport {port} accept\n'
+            underlay += f'add rule inet {self.table} input ip saddr {ip} tcp sport {port} ct state established accept\n'
         command([NFT, '-f', '-'], underlay)
         engine = base + f'''add rule inet {self.table} input iifname "wg0" ip saddr {self.remote} ip daddr {self.overlay} accept
 add rule inet {self.table} output oifname "wg0" ip saddr {self.overlay} ip daddr {self.remote} accept

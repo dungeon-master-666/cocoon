@@ -65,7 +65,7 @@ std::string config_digest(const Json &effective) {
 }
 
 Config validate_config(const Json &runtime, SecurityMode build_policy) {
-  require_fields(runtime, {"profile", "rank", "role", "limits", "simulator", "group", "network", "gate"}, "runtime");
+  require_fields(runtime, {"profile", "rank", "role", "limits", "simulator", "group", "network", "gate", "deployment_id"}, "runtime");
   const auto id = runtime.at("profile").get<std::string>();
   // Trusted catalogue, compiled into the measured executable. Runtime selects
   // an entry; it cannot supply commands, images, policy or environment variables.
@@ -90,7 +90,7 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
   std::optional<NetworkConfig> network;
   if (profile.wireguard) {
     const auto &n = runtime.at("network");
-    require_fields(n, {"underlay_ip", "peer_ip"}, "network");
+    require_fields(n, {"underlay_ip", "peer_ip", "service_egress"}, "network");
     network = NetworkConfig{n.at("underlay_ip").get<std::string>(), n.at("peer_ip").get<std::string>()};
     for (const auto &ip : {network->underlay_ip, network->peer_ip}) {
       const auto address = boost::asio::ip::make_address_v4(ip);
@@ -101,6 +101,21 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
     }
     if (network->underlay_ip == network->peer_ip || !runtime.contains("group")) {
       throw std::runtime_error("WireGuard profile requires two distinct endpoints and membership");
+    }
+    network->service_egress = n.value("service_egress", Json::array());
+    if (!network->service_egress.is_array() || network->service_egress.size() > 8 ||
+        (!network->service_egress.empty() && runtime.at("rank") != 0))
+      throw std::runtime_error("only head may allow up to eight dev service endpoints");
+    for (const auto &entry : network->service_egress) {
+      require_fields(entry, {"ip", "port"}, "service egress");
+      const auto ip = entry.at("ip").get<std::string>();
+      const auto address = boost::asio::ip::make_address_v4(ip);
+      if (address.to_string() != ip || address.is_loopback() || address.is_multicast() || address.is_unspecified() ||
+          address.to_uint() == 0xffffffff || (address.to_uint() >> 8) == 0x0ae700)
+        throw std::runtime_error("service egress must be a unicast IPv4 outside the engine overlay");
+      if (!entry.contains("port"))
+        throw std::runtime_error("service egress port is required");
+      integer(entry, "port", 0, 1, 65535);
     }
   } else if (runtime.contains("network")) {
     throw std::runtime_error("network configuration requires the WireGuard profile");
@@ -211,7 +226,16 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
                             {"probe_interval_ms", 200},
                             {"probe_timeout_ms", 2000},
                             {"backend_uid", 65534},
-                            {"firewall_policy", "roster-only-v1"}};
+                            {"firewall_policy", "roster-and-dev-services-v2"}};
+  }
+  if (runtime.contains("deployment_id")) {
+    const auto id = runtime.at("deployment_id").get<std::string>();
+    if (!network || !group || id.size() != 64 || id.find_first_not_of("0123456789abcdef") != std::string::npos)
+      throw std::runtime_error("deployment_id requires a WireGuard group and a canonical SHA256 digest");
+    // Binds both ranks to the same generated deployment (including image ID,
+    // model, placement, service policy and price), in the existing authenticated
+    // membership digest. Old standalone dev tests retain their original digest.
+    effective["deployment_id"] = id;
   }
   int gate_port = 0;
   if (runtime.contains("gate")) {

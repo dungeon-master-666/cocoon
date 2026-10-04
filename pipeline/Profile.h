@@ -42,6 +42,7 @@ struct GroupConfig {
 struct NetworkConfig {
   std::string underlay_ip;
   std::string peer_ip;
+  Json service_egress = Json::array();
 };
 
 struct Config {

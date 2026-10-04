@@ -91,6 +91,36 @@ int main() {
     auto wired = validate_config(network, SecurityMode::Dev);
     require(wired.profile.wireguard && wired.digest != a.digest, "network policy absent from digest");
     rejects([&] { validate_config(network, SecurityMode::Production); });
+    auto deployed = network;
+    deployed["deployment_id"] = std::string(64, '1');
+    auto first_deployment = validate_config(deployed, SecurityMode::Dev).digest;
+    require(first_deployment != wired.digest, "deployment artifact binding missing from membership digest");
+    deployed["deployment_id"] = std::string(64, '2');
+    require(validate_config(deployed, SecurityMode::Dev).digest != first_deployment,
+            "different deployment artifacts can join the same group");
+    for (const Json &id : {Json(""), Json(std::string(64, 'G')), Json(1)}) {
+      deployed["deployment_id"] = id;
+      rejects([&] { validate_config(deployed, SecurityMode::Dev); });
+    }
+    auto services = network;
+    services["network"]["service_egress"] = {{{"ip", "198.18.0.3"}, {"port", 11001}}};
+    require(validate_config(services, SecurityMode::Dev).network->service_egress.size() == 1,
+            "explicit service egress lost");
+    for (const auto &ip : {"127.0.0.1", "0.0.0.0", "224.0.0.1", "255.255.255.255", "10.231.0.2"}) {
+      auto invalid = services;
+      invalid["network"]["service_egress"][0]["ip"] = ip;
+      rejects([&] { validate_config(invalid, SecurityMode::Dev); });
+    }
+    for (const Json &port : {Json(0), Json(65536), Json(true), Json(11001.5), Json("11001")}) {
+      auto invalid = services;
+      invalid["network"]["service_egress"][0]["port"] = port;
+      rejects([&] { validate_config(invalid, SecurityMode::Dev); });
+    }
+    auto member_services = services;
+    member_services["rank"] = 1;
+    member_services["role"] = "member";
+    member_services["group"] = {{"listen_port", 12310}};
+    rejects([&] { validate_config(member_services, SecurityMode::Dev); });
     for (const auto &ip :
          {"127.0.0.1", "0.0.0.0", "224.0.0.1", "255.255.255.255", "10.231.0.2", "::1", "198.18.0.1", "198.018.0.2"}) {
       auto invalid = network;

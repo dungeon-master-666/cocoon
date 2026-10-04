@@ -764,6 +764,16 @@ std::string WorkerRunner::http_generate_json_stats() {
     }
     jb.add_element("enabled", !is_disabled());
     jb.add_element("uplink_ok", uplink_ok_);
+    td::int32 ready_proxy_connections = 0;
+    foreach_proxy_target([&](ProxyTarget *target) {
+      auto connection = get_connection(target->connection_id());
+      if (target->is_ready() && connection && connection->is_ready()) {
+        ++ready_proxy_connections;
+      }
+    });
+    // Live, handshaken connections; persisted proxy contract state is not
+    // evidence that a proxy is currently connected and can send requests.
+    jb.add_element("ready_proxy_connections", ready_proxy_connections);
     jb.add_element("git_commit", GitMetadata::CommitSHA1());
     jb.add_element("git_commit_data", GitMetadata::CommitDate());
     jb.stop_object();
