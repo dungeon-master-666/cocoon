@@ -6,13 +6,16 @@ namespace asio = boost::asio;
 using Tcp = asio::ip::tcp;
 using Error = boost::system::error_code;
 
-Group::Group(Config config, asio::io_context &io, const Identity &identity, const std::string &boot)
+Group::Group(Config config, asio::io_context &io, const Identity &identity, const std::string &boot,
+             std::string run_dir)
     : config_(std::move(config))
     , io_(io)
     , tls_(std::make_shared<asio::ssl::context>(asio::ssl::context::tls))
     , acceptor_(io)
     , identity_(identity.peer) {
   configure_tls(*tls_, identity);
+  if (config_.profile.wireguard)
+    network_ = std::make_unique<Network>(config_, std::move(run_dir));
   self_ = descriptor(config_, identity_, boot, network_key_.public_key());
   if (config_.rank == 0)
     epoch_ = random_id();
@@ -128,7 +131,7 @@ void Group::receive(const Json &frame) {
       fail("message before authenticated Hello");
       return;
     }
-    auto reply = member_->receive(frame, local_ready_);
+    auto reply = member_->receive(frame, local_ready_, !network_ || network_->healthy());
     channel_->send(reply.frame);
     if (reply.frame.at("payload").contains("error")) {
       rejection_ = reply.frame.at("payload").at("error").get<std::string>();
@@ -138,6 +141,10 @@ void Group::receive(const Json &frame) {
     roster_ = member_->roster();
     roster_digest_ = member_->roster_digest();
     group_id_ = member_->id();
+    if (reply.action == GroupAction::ConfigureNetwork) {
+      configuring_ = true;
+      network_->start(roster_, network_key_);
+    }
     if (reply.renew_lease && !stopping_) {
       leased_ = true;
       lease_deadline_ = Clock::now() + std::chrono::milliseconds(config_.profile.lease_ms);
@@ -195,7 +202,15 @@ void Group::receive(const Json &frame) {
       if (p != Json({{"prepared", true}, {"roster_digest", roster_digest_}}))
         throw std::runtime_error("invalid Prepare acknowledgement");
       state_ = "PREPARED";
-      send("Commit", {{"roster_digest", roster_digest_}});
+      if (network_) {
+        configuring_ = true;
+        send("ConfigureNetwork", {{"roster_digest", roster_digest_}});
+        network_->start(roster_, network_key_);
+      } else
+        send("Commit", {{"roster_digest", roster_digest_}});
+    } else if (op == "ConfigureNetwork") {
+      if (p != Json({{"configuring", true}}))
+        throw std::runtime_error("invalid ConfigureNetwork acknowledgement");
     } else if (op == "Commit") {
       if (p != Json({{"committed", true}}))
         throw std::runtime_error("invalid Commit acknowledgement");
@@ -203,10 +218,12 @@ void Group::receive(const Json &frame) {
       start_pending_ = true;
       state_ = "STARTING";
     } else if (op == "Heartbeat") {
-      require_fields(p, {"local_ready", "ready"}, "Heartbeat response");
-      if (p.size() != 2 || !p.at("ready").is_boolean())
+      require_fields(p, {"local_ready", "ready", "network_ready"}, "Heartbeat response");
+      if (p.size() != (network_ ? 3 : 2) || !p.at("ready").is_boolean())
         throw std::runtime_error("invalid Heartbeat acknowledgement");
       peer_ready_ = p.at("local_ready").get<bool>();
+      if (network_)
+        peer_network_ready_ = p.at("network_ready").get<bool>();
     } else if (op == "Ready") {
       if (p != Json({{"ready", true}}))
         throw std::runtime_error("invalid Ready acknowledgement");
@@ -225,6 +242,11 @@ void Group::send(const std::string &op, Json payload) {
 
 void Group::tick(bool local_ready) {
   local_ready_ = local_ready;
+  if (network_) {
+    network_->tick();
+    if (!stopping_ && !network_->failure().empty())
+      fail(network_->failure());
+  }
   if (closed_ || stopping_ || !lease_valid())
     return;
   const auto now = Clock::now();
@@ -235,8 +257,11 @@ void Group::tick(bool local_ready) {
   if (config_.rank == 0) {
     if (!channel_ && now >= retry_at_)
       dial();
-    if (committed_ && pending_.is_null()) {
-      if (local_ready_ && peer_ready_ && !ready_)
+    if ((committed_ || configuring_) && pending_.is_null()) {
+      if (!committed_ && network_->healthy() && peer_network_ready_)
+        send("Commit", {{"roster_digest", roster_digest_}});
+      else if (committed_ && local_ready_ && peer_ready_ &&
+               (!network_ || (network_->healthy() && peer_network_ready_)) && !ready_)
         send("Ready", {{"roster_digest", roster_digest_}});
       else if (now >= heartbeat_at_)
         send("Heartbeat", {{"roster_digest", roster_digest_}});
@@ -277,6 +302,15 @@ void Group::close() {
     channel_->close();
   for (auto &c : candidates_)
     c->close();
+  if (network_)
+    network_->stop();
+}
+
+bool Group::cleanup_done() {
+  if (!network_)
+    return true;
+  network_->tick();
+  return network_->cleanup_done();
 }
 
 Json Group::status() const {
@@ -292,6 +326,7 @@ Json Group::status() const {
           {"last_rejection", rejection_},
           {"transport", "mutual-tls-1.3"},
           {"attestation", "dev-fixture"},
-          {"network_setup", "simulated"}};
+          {"network_setup", network_ ? "wireguard-netns-v1" : "simulated"},
+          {"network", network_ ? network_->status() : Json(nullptr)}};
 }
 }  // namespace cocoon::pipeline

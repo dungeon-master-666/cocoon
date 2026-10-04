@@ -121,7 +121,7 @@ void Agent::start_up() {
 }
 
 void Agent::form_group() {
-  group_ = std::make_shared<Group>(config_, io_, *identity_, boot_id_);
+  group_ = std::make_shared<Group>(config_, io_, *identity_, boot_id_, run_dir_);
   group_->start();
   transition("FORMING");
 }
@@ -134,6 +134,21 @@ void Agent::start_backend() {
       throw std::runtime_error("cannot create epoch runtime directory");
   }
   plan_ = adapter_->build_launch_plan(config_, directory);
+  if (config_.profile.wireguard) {
+#ifdef __linux__
+    // Traversable parent, root-owned control/status. Only the epoch directory
+    // belongs to the unprivileged backend; it cannot replace agent files.
+    if (chmod(run_dir_.c_str(), 0711) < 0 || chown(directory.c_str(), 65534, 65534) < 0)
+      throw std::runtime_error("cannot prepare unprivileged backend directory");
+    auto args = std::vector<std::string>{PIPELINE_SANDBOX, group_->network_namespace(), std::to_string(getpid())};
+    args.insert(args.end(), plan_.argv.begin(), plan_.argv.end());
+    args.insert(args.end(), {"--overlay-ip", config_.rank == 0 ? "10.231.0.1" : "10.231.0.2"});
+    plan_.executable = PIPELINE_SANDBOX;
+    plan_.argv = std::move(args);
+#else
+    throw std::runtime_error("WireGuard backend requires Linux");
+#endif
+  }
   deadline_ = Clock::now() + std::chrono::milliseconds(config_.profile.startup_ms);
   next_probe_ = Clock::now();
   transition("STARTING");
@@ -173,6 +188,12 @@ void Agent::begin_stop(const std::string &reason) {
 void Agent::finish_stop() {
   if (group_)
     group_->close();
+  if (group_ && !group_->cleanup_done())
+    return;
+  if (group_ && group_->cleanup_failed()) {
+    failure_ = "network cleanup not confirmed; refusing restart";
+    *exit_code_ = 1;
+  }
   if (process_->cleanup_failed()) {
     failure_ += (failure_.empty() ? "" : "; ") + std::string("backend cleanup deadline exceeded");
     *exit_code_ = 1;
@@ -184,7 +205,7 @@ void Agent::finish_stop() {
     }
   }
   if (config_.group && !shutdown_ && !failure_.empty() && !process_->cleanup_failed() &&
-      attempt_ < config_.profile.max_restarts && identity_) {
+      attempt_ < config_.profile.max_restarts && identity_ && (!group_ || !group_->cleanup_failed())) {
     last_failure_ = failure_;
     restart_at_ = Clock::now() + std::chrono::milliseconds(config_.profile.restart_ms);
     transition("BACKOFF");

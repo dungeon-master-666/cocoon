@@ -2,15 +2,24 @@
 #include "pipeline/Channel.h"
 #include "pipeline/Process.h"
 #include "pipeline/Protocol.h"
+#include "pipeline/Network.h"
 
 namespace cocoon::pipeline {
 class Group : public std::enable_shared_from_this<Group> {
  public:
-  Group(Config config, boost::asio::io_context &io, const Identity &identity, const std::string &boot);
+  Group(Config config, boost::asio::io_context &io, const Identity &identity, const std::string &boot,
+        std::string run_dir);
   void start();
   void tick(bool local_ready);
   void stop(const std::string &reason);
   void close();
+  bool cleanup_done();
+  bool cleanup_failed() const {
+    return network_ && network_->cleanup_failed();
+  }
+  std::string network_namespace() const {
+    return network_ ? network_->name() : "";
+  }
   bool take_start();
   bool stopped() const {
     return stopping_;
@@ -39,6 +48,7 @@ class Group : public std::enable_shared_from_this<Group> {
   boost::asio::ip::tcp::acceptor acceptor_;
   PeerIdentity identity_;
   NetworkKey network_key_;
+  std::unique_ptr<Network> network_;
   Json self_, roster_, pending_;
   std::string epoch_, group_id_, roster_digest_, challenge_, state_ = "FORMING", failure_, rejection_;
   std::unique_ptr<MemberSession> member_;
@@ -48,5 +58,6 @@ class Group : public std::enable_shared_from_this<Group> {
   uint64_t sequence_ = 0;
   bool leased_ = false, local_ready_ = false, peer_ready_ = false, start_pending_ = false;
   bool committed_ = false, ready_ = false, stopping_ = false, closed_ = false;
+  bool configuring_ = false, peer_network_ready_ = false;
 };
 }  // namespace cocoon::pipeline

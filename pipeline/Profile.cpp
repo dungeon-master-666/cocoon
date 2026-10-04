@@ -4,6 +4,7 @@
 #include <fstream>
 #include <set>
 #include <stdexcept>
+#include <boost/asio/ip/address_v4.hpp>
 
 namespace cocoon::pipeline {
 void require_fields(const Json &value, std::initializer_list<const char *> allowed, const char *where) {
@@ -59,15 +60,39 @@ std::string config_digest(const Json &effective) {
 }
 
 Config validate_config(const Json &runtime, SecurityMode build_policy) {
-  require_fields(runtime, {"profile", "rank", "role", "limits", "simulator", "group"}, "runtime");
+  require_fields(runtime, {"profile", "rank", "role", "limits", "simulator", "group", "network"}, "runtime");
   const auto id = runtime.at("profile").get<std::string>();
   // Trusted catalogue, compiled into the measured executable. Runtime selects
   // an entry; it cannot supply commands, images, policy or environment variables.
-  if (id != "simulator-dev-pp2-v1") {
+  if (id != "simulator-dev-pp2-v1" && id != "simulator-dev-pp2-wg-v1") {
     throw std::runtime_error("unknown or unsupported profile: " + id);
   }
   Profile profile{id, SecurityMode::Dev, "simulator", 2};
+  profile.wireguard = id == "simulator-dev-pp2-wg-v1";
+  if (profile.wireguard) {
+    profile.formation_ms = 30000;
+    profile.heartbeat_ms = 500;
+    profile.lease_ms = 5000;
+  }
   validate_profile(profile, build_policy);
+  std::optional<NetworkConfig> network;
+  if (profile.wireguard) {
+    const auto &n = runtime.at("network");
+    require_fields(n, {"underlay_ip", "peer_ip"}, "network");
+    network = NetworkConfig{n.at("underlay_ip").get<std::string>(), n.at("peer_ip").get<std::string>()};
+    for (const auto &ip : {network->underlay_ip, network->peer_ip}) {
+      const auto address = boost::asio::ip::make_address_v4(ip);
+      if (address.to_string() != ip || address.is_loopback() || address.is_multicast() || address.is_unspecified() ||
+          address.to_uint() == 0xffffffff || (address.to_uint() >> 8) == 0x0ae700) {
+        throw std::runtime_error("network endpoints must be unicast IPv4 outside the overlay");
+      }
+    }
+    if (network->underlay_ip == network->peer_ip || !runtime.contains("group")) {
+      throw std::runtime_error("WireGuard profile requires two distinct endpoints and membership");
+    }
+  } else if (runtime.contains("network")) {
+    throw std::runtime_error("network configuration requires the WireGuard profile");
+  }
   if (!runtime.contains("rank")) {
     throw std::runtime_error("rank is required");
   }
@@ -129,13 +154,18 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
   if (runtime.contains("group")) {
     const auto &g = runtime.at("group");
     require_fields(g, {"listen_host", "listen_port", "peer_host", "peer_port", "certificate_base"}, "group");
-    group = GroupConfig{g.value("listen_host", std::string("127.0.0.1")), integer(g, "listen_port", 0, 1024, 65535),
-                        g.value("peer_host", std::string("127.0.0.1")), integer(g, "peer_port", 0, 1024, 65535),
-                        g.value("certificate_base", std::string())};
-    if (group->listen_host != "127.0.0.1" || group->peer_host != "127.0.0.1" ||
+    group = GroupConfig{g.value("listen_host", network ? network->underlay_ip : std::string("127.0.0.1")),
+                        integer(g, "listen_port", 0, 1024, 65535),
+                        g.value("peer_host", network ? network->peer_ip : std::string("127.0.0.1")),
+                        integer(g, "peer_port", 0, 1024, 65535), g.value("certificate_base", std::string())};
+    if (group->listen_host != (network ? network->underlay_ip : "127.0.0.1") ||
+        group->peer_host != (network ? network->peer_ip : "127.0.0.1") ||
         (rank == 0 && (group->peer_port == 0 || group->listen_port != 0)) ||
         (rank == 1 && (group->listen_port == 0 || group->peer_port != 0))) {
-      throw std::runtime_error("dev group requires loopback and head peer_port / member listen_port");
+      throw std::runtime_error("group endpoints must match profile and head peer_port / member listen_port");
+    }
+    if (network && (rank == 0 ? group->peer_port : group->listen_port) != 12310) {
+      throw std::runtime_error("WireGuard profile fixes the control port at 12310");
     }
     effective["membership"] = {{"version", 1},
                                {"policy", "dev-ratls-v1"},
@@ -144,8 +174,17 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
                                {"formation_ms", profile.formation_ms},
                                {"restart_ms", profile.restart_ms},
                                {"max_restarts", profile.max_restarts},
-                               {"network_setup", "simulated"}};
+                               {"network_setup", profile.wireguard ? "wireguard-netns-v1" : "simulated"}};
     effective["security_policy_version"] = "dev-ratls-v1";
+  }
+  if (network) {
+    effective["network"] = {{"wireguard_port", 51820},
+                            {"mtu", 1320},
+                            {"probe_port", 29998},
+                            {"probe_interval_ms", 200},
+                            {"probe_timeout_ms", 2000},
+                            {"backend_uid", 65534},
+                            {"firewall_policy", "roster-only-v1"}};
   }
   return {profile,
           effective,
@@ -155,7 +194,8 @@ Config validate_config(const Json &runtime, SecurityMode build_policy) {
           scenario,
           integer(sim, "startup_delay_ms", 0, 0, 30000),
           integer(sim, "warmup_delay_ms", 0, 0, 30000),
-          group};
+          group,
+          network};
 }
 
 Json read_config(const std::string &path) {

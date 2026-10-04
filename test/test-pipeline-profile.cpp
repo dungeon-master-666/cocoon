@@ -63,6 +63,36 @@ int main() {
                 plan.health_socket == "/tmp/pipeline-test/health.sock",
             "invalid launch plan");
     require(plan.env.size() == 3, "unexpected inherited environment");
+    Json network = {{"profile", "simulator-dev-pp2-wg-v1"},
+                    {"rank", 0},
+                    {"role", "head"},
+                    {"group", {{"peer_port", 12310}}},
+                    {"network", {{"underlay_ip", "198.18.0.1"}, {"peer_ip", "198.18.0.2"}}}};
+    auto wired = validate_config(network, SecurityMode::Dev);
+    require(wired.profile.wireguard && wired.digest != a.digest, "network policy absent from digest");
+    rejects([&] { validate_config(network, SecurityMode::Production); });
+    for (const auto &ip :
+         {"127.0.0.1", "0.0.0.0", "224.0.0.1", "255.255.255.255", "10.231.0.2", "::1", "198.18.0.1", "198.018.0.2"}) {
+      auto invalid = network;
+      invalid["network"]["peer_ip"] = ip;
+      rejects([&] { validate_config(invalid, SecurityMode::Dev); });
+    }
+    for (const auto &field : {"private_key", "allowed_ips", "namespace", "mtu"}) {
+      auto invalid = network;
+      invalid["network"][field] = "injected";
+      rejects([&] { validate_config(invalid, SecurityMode::Dev); });
+    }
+    for (const auto &field : {"group", "network"}) {
+      auto invalid = network;
+      invalid.erase(field);
+      rejects([&] { validate_config(invalid, SecurityMode::Dev); });
+    }
+    auto invalid = network;
+    invalid["group"]["peer_port"] = 12311;
+    rejects([&] { validate_config(invalid, SecurityMode::Dev); });
+    invalid = network;
+    invalid["profile"] = "simulator-dev-pp2-v1";
+    rejects([&] { validate_config(invalid, SecurityMode::Dev); });
     std::cout << "PASS: profile policy, schema, limits, canonical digest and launch plan\n";
     return 0;
   } catch (const std::exception &error) {

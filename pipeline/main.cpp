@@ -3,6 +3,10 @@
 #include <filesystem>
 #include <iostream>
 #include <sys/stat.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#endif
 
 using namespace cocoon::pipeline;
 
@@ -19,7 +23,7 @@ int main(int argc, char **argv) {
       const std::string arg = argv[i];
       if (arg == "--help") {
         std::cout << "pipeline-agent --config FILE [--check-config | --run-dir NEW_DIRECTORY]\n"
-                     "Dev local supervisor and mutual-TLS membership; networking is simulated.\n"
+                     "Dev supervisor and mutual-TLS groups; Linux WireGuard requires its dedicated profile.\n"
                   << "Build policy: " << (policy == SecurityMode::Dev ? "dev" : "production") << '\n';
         return 0;
       } else if (arg == "--check-config") {
@@ -38,6 +42,10 @@ int main(int argc, char **argv) {
       throw std::runtime_error("use --config FILE with either --check-config or --run-dir NEW_DIRECTORY");
     }
     auto config = validate_config(read_config(config_path), policy);
+#ifndef __linux__
+    if (config.profile.wireguard && !check_only)
+      throw std::runtime_error("WireGuard profile requires Linux");
+#endif
     if (check_only) {
       std::cout << Json({{"effective_config", config.effective},
                          {"config_digest", config.digest},
@@ -47,6 +55,13 @@ int main(int argc, char **argv) {
                 << '\n';
       return 0;
     }
+#ifdef __linux__
+    if (config.profile.wireguard) {
+      rlimit core{0, 0};
+      if (setrlimit(RLIMIT_CORE, &core) != 0 || prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0)
+        throw std::runtime_error("cannot protect network key memory");
+    }
+#endif
     // No existing runtime directory is reused or removed, including after a crash.
     // Validate before creating files or launching any backend.
     run_dir = std::filesystem::absolute(run_dir).lexically_normal().string();

@@ -17,6 +17,8 @@ struct LaunchPlan {
   std::string log_path;
   std::string api_socket;
   std::string health_socket;
+  int input_fd = -1;
+  int output_fd = -1;
 };
 
 // Owns only the process group created by posix_spawn. Backends must not daemonize

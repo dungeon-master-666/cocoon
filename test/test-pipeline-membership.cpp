@@ -149,11 +149,58 @@ bool tls_pair(const std::string &client_variant, const std::string &server_varia
   io.poll();
   return ready_count == 2 && !failed;
 }
+
+void network_protocol_tests() {
+  auto config = [](int rank) {
+    return validate_config(
+        {{"profile", "simulator-dev-pp2-wg-v1"},
+         {"rank", rank},
+         {"role", rank ? "member" : "head"},
+         {"group", {{rank ? "listen_port" : "peer_port", 12310}}},
+         {"network",
+          {{"underlay_ip", rank ? "198.18.0.2" : "198.18.0.1"}, {"peer_ip", rank ? "198.18.0.1" : "198.18.0.2"}}}},
+        SecurityMode::Dev);
+  };
+  auto h = config(0), m = config(1);
+  require(h.digest == m.digest, "placement changed network profile digest");
+  PeerIdentity hi{random_id(), dev_image_hash()}, mi{random_id(), dev_image_hash()};
+  NetworkKey hk, mk;
+  auto hd = descriptor(h, hi, random_id(), hk.public_key()), md = descriptor(m, mi, random_id(), mk.public_key());
+  auto epoch = random_id();
+  MemberSession member(m, md, hi);
+  auto hello = request_frame(h, epoch, 1, "Hello", {{"peer", hd}, {"challenge", random_id()}});
+  auto bad = hello;
+  bad["payload"]["peer"]["network_endpoint"]["ip"] = "198.18.0.99";
+  rejected(member.receive(bad, false, false));
+  auto reply = member.receive(hello, false, false);
+  auto roster = Json::array({hd, md});
+  auto digest = config_digest(roster);
+  auto prepare = request_frame(h, epoch, 2, "Prepare",
+                               {{"roster", roster},
+                                {"roster_digest", digest},
+                                {"group_id", group_id(hi.public_key, epoch, h.digest)},
+                                {"echo", reply.frame["payload"]["challenge"]},
+                                {"lease_ms", h.profile.lease_ms}});
+  require(member.receive(prepare, false, false).renew_lease, "network Prepare failed");
+  rejected(member.receive(request_frame(h, epoch, 3, "Commit", {{"roster_digest", digest}}), false, false));
+  auto configure = request_frame(h, epoch, 3, "ConfigureNetwork", {{"roster_digest", digest}});
+  require(member.receive(configure, false, false).action == GroupAction::ConfigureNetwork, "network setup not emitted");
+  require(member.receive(configure, false, false).action == GroupAction::None, "network replay reconfigured keys");
+  auto commit = request_frame(h, epoch, 4, "Commit", {{"roster_digest", digest}});
+  rejected(member.receive(commit, false, false));
+  auto heartbeat = request_frame(h, epoch, 4, "Heartbeat", {{"roster_digest", digest}});
+  auto heartbeat_reply = member.receive(heartbeat, false, false);
+  require(heartbeat_reply.renew_lease && heartbeat_reply.frame["payload"]["network_ready"] == false,
+          "network formation heartbeat failed");
+  commit["sequence"] = 5;
+  require(member.receive(commit, false, true).action == GroupAction::Start, "healthy network Commit failed");
+}
 }  // namespace
 
 int main() {
   try {
     protocol_tests();
+    network_protocol_tests();
     require(tls_pair("valid", "valid", SecurityMode::Dev), "valid mutual TLS failed");
     for (const auto *bad : {"wrong-image", "wrong-key", "missing-evidence", "expired"}) {
       require(!tls_pair(bad, "valid", SecurityMode::Dev), "invalid client evidence accepted");

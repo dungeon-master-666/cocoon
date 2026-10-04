@@ -213,4 +213,18 @@ NetworkKey::NetworkKey() {
   }
   public_key_ = td::hex_encode(td::Slice(public_key, size));
 }
+
+std::string NetworkKey::private_key_base64() const {
+  unsigned char raw[32];
+  size_t size = sizeof(raw);
+  if (EVP_PKEY_get_raw_private_key(key_.get(), raw, &size) != 1 || size != sizeof(raw)) {
+    throw std::runtime_error("network private key extraction failed");
+  }
+  unsigned char encoded[45];
+  EVP_EncodeBlock(encoded, raw, sizeof(raw));
+  OPENSSL_cleanse(raw, sizeof(raw));
+  std::string result(reinterpret_cast<char *>(encoded), 44);
+  OPENSSL_cleanse(encoded, sizeof(encoded));
+  return result;
+}
 }  // namespace cocoon::pipeline

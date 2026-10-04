@@ -32,11 +32,23 @@ void Process::start(const LaunchPlan &plan) {
     check(code, "spawn attributes");
   }
   try {
-    check(posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0), "spawn stdin");
-    check(posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, plan.log_path.c_str(), O_WRONLY | O_CREAT | O_EXCL,
-                                           0600),
+    if (plan.input_fd >= 0) {
+      check(posix_spawn_file_actions_adddup2(&actions, plan.input_fd, STDIN_FILENO), "spawn stdin pipe");
+    } else {
+      check(posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0), "spawn stdin");
+    }
+    check(posix_spawn_file_actions_addopen(&actions, plan.output_fd >= 0 ? STDERR_FILENO : STDOUT_FILENO,
+                                           plan.log_path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600),
           "spawn log");
-    check(posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO), "spawn stderr");
+    if (plan.output_fd >= 0) {
+      check(posix_spawn_file_actions_adddup2(&actions, plan.output_fd, STDOUT_FILENO), "spawn stdout pipe");
+    } else {
+      check(posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO), "spawn stderr");
+    }
+#ifdef __linux__
+    // In particular, do not give a backend the network guardian's owner pipe.
+    check(posix_spawn_file_actions_addclosefrom_np(&actions, 3), "spawn close inherited descriptors");
+#endif
     sigset_t empty, defaults;
     sigemptyset(&empty);
     sigemptyset(&defaults);

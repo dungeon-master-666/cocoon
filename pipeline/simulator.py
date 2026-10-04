@@ -11,6 +11,7 @@ import socket
 import socketserver
 import subprocess
 import sys
+import struct
 import threading
 import time
 from pathlib import Path
@@ -257,6 +258,52 @@ class Handler(HealthHandler):
                 state.slots.release()
 
 
+class NetworkEcho(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    """Bounded synthetic engine traffic for namespace/WireGuard tests only."""
+    daemon_threads = True
+    block_on_close = False
+    allow_reuse_address = True
+
+    def __init__(self, ip):
+        self.connections = threading.BoundedSemaphore(8)
+        super().__init__((ip, 29999), EchoHandler)
+
+    def process_request(self, request, address):
+        if not self.connections.acquire(blocking=False):
+            request.close()
+            return
+        try:
+            super().process_request(request, address)
+        except BaseException:
+            self.connections.release()
+            raise
+
+    def process_request_thread(self, request, address):
+        try:
+            super().process_request_thread(request, address)
+        finally:
+            self.connections.release()
+
+
+class EchoHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        self.request.settimeout(1)
+        def exact(count):
+            data = b''
+            while len(data) < count:
+                part = self.request.recv(count - len(data))
+                if not part: raise EOFError()
+                data += part
+            return data
+        try:
+            size = struct.unpack('!I', exact(4))[0]
+            if 0 < size <= 65536:
+                body = exact(size)
+                self.request.sendall(struct.pack('!I', size) + body)
+        except (OSError, EOFError):
+            pass
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--socket', required=True)
@@ -270,6 +317,7 @@ def main():
     parser.add_argument('--scenario', required=True)
     parser.add_argument('--startup-delay-ms', type=int, required=True)
     parser.add_argument('--warmup-delay-ms', type=int, required=True)
+    parser.add_argument('--overlay-ip', choices=('10.231.0.1', '10.231.0.2'))
     args = parser.parse_args()
     os.umask(0o077)
     if args.scenario == 'startup-exit':
@@ -285,6 +333,9 @@ def main():
     if args.scenario == 'startup-hang':
         time.sleep(30)
     state = State(args)
+    network = NetworkEcho(args.overlay_ip) if args.overlay_ip else None
+    if network:
+        threading.Thread(target=network.serve_forever, kwargs={'poll_interval': 0.05}, daemon=True).start()
     with Server(state, args.socket, Handler) as server, Server(state, args.health_socket, HealthHandler) as health:
         # Separate accept loops and connection budgets keep probes responsive
         # when API clients occupy every handler while sending partial requests.
@@ -296,6 +347,9 @@ def main():
         finally:
             health.shutdown()
             health_thread.join()
+            if network:
+                network.shutdown()
+                network.server_close()
     return 0
 
 

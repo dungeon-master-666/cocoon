@@ -25,6 +25,7 @@ struct Profile {
   int formation_ms = 4000;
   int restart_ms = 500;
   int max_restarts = 2;
+  bool wireguard = false;
 };
 
 struct GroupConfig {
@@ -33,6 +34,11 @@ struct GroupConfig {
   std::string peer_host;
   int peer_port = 0;
   std::string certificate_base;
+};
+
+struct NetworkConfig {
+  std::string underlay_ip;
+  std::string peer_ip;
 };
 
 struct Config {
@@ -45,6 +51,7 @@ struct Config {
   int startup_delay_ms;
   int warmup_delay_ms;
   std::optional<GroupConfig> group;
+  std::optional<NetworkConfig> network;
 };
 
 void validate_profile(const Profile &profile, SecurityMode build_policy);

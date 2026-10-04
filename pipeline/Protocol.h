@@ -3,7 +3,7 @@
 #include <map>
 
 namespace cocoon::pipeline {
-enum class GroupAction { None, Start, Stop };
+enum class GroupAction { None, ConfigureNetwork, Start, Stop };
 struct ProtocolReply {
   Json frame;
   GroupAction action = GroupAction::None;
@@ -23,7 +23,7 @@ void validate_frame(const Json &frame, const char *kind);
 class MemberSession {
  public:
   MemberSession(Config config, Json self, PeerIdentity head_identity);
-  ProtocolReply receive(const Json &frame, bool local_ready);
+  ProtocolReply receive(const Json &frame, bool local_ready, bool network_ready = true);
   const std::string &epoch() const {
     return epoch_;
   }
@@ -44,13 +44,13 @@ class MemberSession {
   }
 
  private:
-  ProtocolReply apply(const Json &frame, bool local_ready);
+  ProtocolReply apply(const Json &frame, bool local_ready, bool network_ready);
   Config config_;
   Json self_, head_, roster_;
   PeerIdentity head_identity_;
   std::string epoch_, challenge_, roster_digest_, group_id_;
   uint64_t sequence_ = 0;
-  bool prepared_ = false, committed_ = false, ready_ = false, stopped_ = false;
+  bool prepared_ = false, network_started_ = false, committed_ = false, ready_ = false, stopped_ = false;
   std::map<std::string, std::pair<Json, Json>> cache_;
 };
 }  // namespace cocoon::pipeline

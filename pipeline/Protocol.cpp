@@ -28,24 +28,30 @@ Json response(const Json &request, const Json &payload) {
 
 Json descriptor(const Config &config, const PeerIdentity &identity, const std::string &boot,
                 const std::string &network_key) {
-  return {{"rank", config.rank},
-          {"role", config.role},
-          {"identity", identity.public_key},
-          {"image_hash", identity.image_hash},
-          {"boot_id", boot},
-          {"network_key", network_key},
-          {"overlay_ip", config.rank == 0 ? "10.231.0.1" : "10.231.0.2"},
-          {"profile_id", config.profile.id},
-          {"backend_kind", config.profile.backend},
-          {"local_checks", "dev-model-fixture-no-gpu"}};
+  Json result = {{"rank", config.rank},
+                 {"role", config.role},
+                 {"identity", identity.public_key},
+                 {"image_hash", identity.image_hash},
+                 {"boot_id", boot},
+                 {"network_key", network_key},
+                 {"overlay_ip", config.rank == 0 ? "10.231.0.1" : "10.231.0.2"},
+                 {"profile_id", config.profile.id},
+                 {"backend_kind", config.profile.backend},
+                 {"local_checks", "dev-model-fixture-no-gpu"}};
+  if (config.network)
+    result["network_endpoint"] = {{"ip", config.network->underlay_ip}, {"port", 51820}};
+  return result;
 }
 
 void validate_descriptor(const Json &v, const Config &config, int rank, const PeerIdentity &identity) {
   require_fields(v,
                  {"rank", "role", "identity", "image_hash", "boot_id", "network_key", "overlay_ip", "profile_id",
-                  "backend_kind", "local_checks"},
+                  "backend_kind", "local_checks", "network_endpoint"},
                  "peer descriptor");
-  require(v.size() == 10, "incomplete peer descriptor");
+  require(v.size() == (config.network ? 11 : 10), "incomplete peer descriptor");
+  if (config.network)
+    require(v.at("network_endpoint") == Json({{"ip", config.network->peer_ip}, {"port", 51820}}),
+            "unexpected peer network endpoint");
   require(v.at("rank").is_number_integer() && v.at("rank") == rank, "unexpected rank");
   require(v.at("role") == (rank == 0 ? "head" : "member"), "unexpected role");
   require(v.at("identity") == identity.public_key && v.at("image_hash") == identity.image_hash,
@@ -105,7 +111,7 @@ MemberSession::MemberSession(Config config, Json self, PeerIdentity head_identit
     , challenge_(random_id()) {
 }
 
-ProtocolReply MemberSession::receive(const Json &frame, bool local_ready) {
+ProtocolReply MemberSession::receive(const Json &frame, bool local_ready, bool network_ready) {
   try {
     validate_frame(frame, "request");
     require(frame.at("config_digest") == config_.digest, "config digest mismatch");
@@ -119,7 +125,7 @@ ProtocolReply MemberSession::receive(const Json &frame, bool local_ready) {
     if (frame.at("op") != "Heartbeat") {
       require(cache_.size() < 8, "too many lifecycle requests");
     }
-    auto result = apply(frame, local_ready);
+    auto result = apply(frame, local_ready, network_ready);
     sequence_ = frame.at("sequence").get<uint64_t>();
     if (frame.at("op") != "Heartbeat") {
       cache_.emplace(id, std::make_pair(frame, result.frame));
@@ -131,7 +137,7 @@ ProtocolReply MemberSession::receive(const Json &frame, bool local_ready) {
   }
 }
 
-ProtocolReply MemberSession::apply(const Json &frame, bool local_ready) {
+ProtocolReply MemberSession::apply(const Json &frame, bool local_ready, bool network_ready) {
   const auto op = frame.at("op").get<std::string>();
   const auto &p = frame.at("payload");
   require(!stopped_, "group already stopped");
@@ -174,8 +180,19 @@ ProtocolReply MemberSession::apply(const Json &frame, bool local_ready) {
   }
   require_fields(p, {"roster_digest"}, "lifecycle payload");
   require(p.size() == 1 && p.at("roster_digest") == roster_digest_, "roster digest mismatch");
+  if (op == "ConfigureNetwork") {
+    require(config_.profile.wireguard && !network_started_ && !committed_, "unexpected network configuration");
+    network_started_ = true;
+    return {response(frame, {{"configuring", true}}), GroupAction::ConfigureNetwork, true};
+  }
+  if (op == "Heartbeat" && config_.profile.wireguard) {
+    require(network_started_, "network configuration required first");
+    return {response(frame, {{"local_ready", local_ready}, {"ready", ready_}, {"network_ready", network_ready}}),
+            GroupAction::None, true};
+  }
   if (op == "Commit") {
     require(!committed_, "group already committed");
+    require(!config_.profile.wireguard || (network_started_ && network_ready), "network not ready");
     committed_ = true;
     return {response(frame, {{"committed", true}}), GroupAction::Start, true};
   }
@@ -184,7 +201,7 @@ ProtocolReply MemberSession::apply(const Json &frame, bool local_ready) {
     return {response(frame, {{"local_ready", local_ready}, {"ready", ready_}}), GroupAction::None, true};
   }
   if (op == "Ready") {
-    require(local_ready && !ready_, "local warmup not complete or group already ready");
+    require(local_ready && network_ready && !ready_, "local warmup/network not complete or group already ready");
     ready_ = true;
     return {response(frame, {{"ready", true}}), GroupAction::None, true};
   }

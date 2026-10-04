@@ -32,6 +32,7 @@ class NetworkKey {
   const std::string &public_key() const {
     return public_key_;
   }
+  std::string private_key_base64() const;
 
  private:
   std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key_{nullptr, EVP_PKEY_free};

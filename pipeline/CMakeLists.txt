@@ -2,14 +2,20 @@
 # simulator profiles in the production executable.
 if(UNIX)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
-  add_library(pipeline_core STATIC Profile.cpp Backend.cpp Process.cpp HttpProbe.cpp Agent.cpp Security.cpp Protocol.cpp Channel.cpp Group.cpp)
+  add_library(pipeline_core STATIC Profile.cpp Backend.cpp Process.cpp HttpProbe.cpp Agent.cpp Security.cpp Protocol.cpp Channel.cpp Group.cpp Network.cpp)
   target_include_directories(pipeline_core PUBLIC ${PROJECT_SOURCE_DIR})
   target_link_libraries(pipeline_core PUBLIC tdactor tdutils nlohmann_json::nlohmann_json Boost::headers)
   target_link_libraries(pipeline_core PUBLIC cocoon tdnet_ported ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
   target_include_directories(pipeline_core SYSTEM PUBLIC ${OPENSSL_INCLUDE_DIR})
   target_compile_definitions(pipeline_core PRIVATE
     PIPELINE_PYTHON="${Python3_EXECUTABLE}"
-    PIPELINE_SIMULATOR="${CMAKE_CURRENT_SOURCE_DIR}/simulator.py")
+    PIPELINE_SIMULATOR="${CMAKE_CURRENT_SOURCE_DIR}/simulator.py"
+    PIPELINE_NETWORK_HELPER="${CMAKE_CURRENT_SOURCE_DIR}/network-helper.py")
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(pipeline-backend-sandbox backend-sandbox.cpp)
+    target_compile_definitions(pipeline_core PRIVATE PIPELINE_SANDBOX="$<TARGET_FILE:pipeline-backend-sandbox>")
+    add_dependencies(pipeline_core pipeline-backend-sandbox)
+  endif()
 
   add_executable(pipeline-agent main.cpp)
   target_link_libraries(pipeline-agent PRIVATE pipeline_core)

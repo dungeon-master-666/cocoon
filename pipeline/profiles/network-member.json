@@ -1,0 +1,7 @@
+{
+  "profile": "simulator-dev-pp2-wg-v1",
+  "rank": 1,
+  "role": "member",
+  "group": {"listen_port": 12310},
+  "network": {"underlay_ip": "198.18.0.2", "peer_ip": "198.18.0.1"}
+}
