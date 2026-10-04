@@ -1,4 +1,5 @@
 #pragma once
+#include "boost-http/http-client.h"
 
 #include "td/actor/ActorId.h"
 #include "td/actor/common.h"
@@ -26,12 +27,16 @@ class WorkerUplinkMonitor : public td::actor::Actor {
   void start_up() override {
     send_request();
   }
+  void tear_down() override {
+    request_.cancel();
+  }
 
   void send_request();
   void got_http_answer(td::int32 status_code);
   void requests_completed(bool is_success);
 
  private:
+  http::HttpRequestHandle request_;
   td::IPAddress addr_;
   td::actor::ActorId<WorkerRunner> runner_;
   td::actor::Scheduler *scheduler_;

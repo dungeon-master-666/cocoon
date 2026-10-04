@@ -12,6 +12,10 @@ WorkerRunner *WorkerProxyConnection::runner() {
   return static_cast<WorkerRunner *>(ProxyOutboundConnection::runner());
 }
 
+void WorkerProxyConnection::pre_close() {
+  runner()->cancel_requests(connection_id());
+}
+
 /*
  *
  * Sending handshake to proxy 

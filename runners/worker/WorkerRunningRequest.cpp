@@ -59,6 +59,8 @@ WorkerRunningRequest::WorkerRunningRequest(td::Bits256 proxy_request_id, TcpClie
 void WorkerRunningRequest::start_request() {
   LOG(INFO) << "worker request " << proxy_request_id_.to_hex() << ": received";
   stats()->requests_received++;
+  if (!check_deadline())
+    return;
 
   auto R = cocoon::fetch_tl_object<cocoon_api::http_request>(std::move(data_), true);
   if (R.is_error()) {
@@ -167,15 +169,27 @@ void WorkerRunningRequest::start_request() {
     td::actor::ActorId<WorkerRunningRequest> self_;
     td::actor::Scheduler *scheduler_;
   };
-  http::run_http_request(http_server_address_, request_type, std::move(url), std::move(headers),
-                         new_payload.as_slice().str(), timeout_ * 0.95,
-                         std::make_unique<Cb>(actor_id(this), scheduler_));
+  if (!check_deadline())
+    return;
+  http_request_ = http::run_http_request(http_server_address_, request_type, std::move(url), std::move(headers),
+                                         new_payload.as_slice().str(), timeout_ - run_time(),
+                                         std::make_unique<Cb>(actor_id(this), scheduler_));
+}
+
+bool WorkerRunningRequest::check_deadline() {
+  if (completed_)
+    return false;
+  if (run_time() >= timeout_) {
+    send_error(td::Status::Error(ton::ErrorCode::timeout, "worker: timeout"));
+    return false;
+  }
+  return true;
 }
 
 void WorkerRunningRequest::process_request_response(td::int32 status_code,
                                                     std::vector<std::pair<std::string, std::string>> headers,
                                                     std::string payload_part, bool payload_is_completed) {
-  if (completed_)
+  if (!check_deadline())
     return;
   backend_status_ = status_code;
   if (status_code < 200 || status_code >= 300) {
@@ -254,9 +268,8 @@ void WorkerRunningRequest::receive_http_error_payload(std::string payload, bool 
 
 void WorkerRunningRequest::send_answer(td::int32 status_code, std::vector<std::pair<std::string, std::string>> headers,
                                        std::string orig_payload, bool payload_is_completed) {
-  if (completed_) {
+  if (!check_deadline())
     return;
-  }
   LOG(DEBUG) << "worker request " << proxy_request_id_.to_hex() << ": starting sending answer";
 
   auto result = process_payload(orig_payload, payload_is_completed);
@@ -265,6 +278,8 @@ void WorkerRunningRequest::send_answer(td::int32 status_code, std::vector<std::p
     return;
   }
   auto payload_to_send = result.move_as_ok();
+  if (!check_deadline())
+    return;
 
   stats()->answer_bytes_sent += (double)payload_to_send.size();
   if (payload_to_send.size() > 0) {
@@ -313,9 +328,8 @@ void WorkerRunningRequest::send_answer(td::int32 status_code, std::vector<std::p
 }
 
 void WorkerRunningRequest::send_payload_part(std::string orig_payload_part, bool payload_is_completed) {
-  if (completed_) {
+  if (!check_deadline())
     return;
-  }
   if (backend_status_ < 200 || backend_status_ >= 300) {
     receive_http_error_payload(std::move(orig_payload_part), payload_is_completed);
     return;
@@ -332,6 +346,8 @@ void WorkerRunningRequest::send_payload_part(std::string orig_payload_part, bool
   }
   auto payload_to_send = result.move_as_ok();
 
+  if (!check_deadline())
+    return;
   send_processed_payload(std::move(payload_to_send), payload_is_completed);
 }
 
@@ -375,6 +391,8 @@ void WorkerRunningRequest::finish_request(bool is_success) {
     stats_->reasoning_adjusted_tokens_used += (double)tokens_used->reasoning_tokens_used_;
   }
   completed_ = true;
+  http_request_.cancel();
+  http_request_ = {};
   if (is_success) {
     stats()->requests_success++;
   } else {
@@ -383,7 +401,8 @@ void WorkerRunningRequest::finish_request(bool is_success) {
 
   stats()->total_requests_time += run_time();
 
-  td::actor::send_closure(runner_, &WorkerRunner::finish_request, proxy_request_id_, is_success);
+  td::actor::send_closure(runner_, &WorkerRunner::finish_request, proxy_connection_id_, proxy_request_id_,
+                          actor_id(this));
 
   stop();
 }

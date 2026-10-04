@@ -1,6 +1,7 @@
 #pragma once
 
 #include "auto/tl/cocoon_api.h"
+#include "boost-http/http-client.h"
 #include "common/bitstring.h"
 #include "errorcode.h"
 #include "runners/BaseRunner.hpp"
@@ -28,12 +29,21 @@ class WorkerRunningRequest : public td::actor::Actor {
                        td::actor::Scheduler *scheduler, std::shared_ptr<WorkerStats> stats);
 
   void start_up() override {
-    alarm_timestamp() = td::Timestamp::in(timeout_);
+    alarm_timestamp() = td::Timestamp::at(started_at_ + timeout_);
     start_request();
   }
 
   void alarm() override {
     send_error(td::Status::Error(ton::ErrorCode::timeout, "worker: timeout"));
+  }
+  void tear_down() override {
+    http_request_.cancel();
+  }
+  void hangup() override {
+    cancel();
+  }
+  void cancel() {
+    send_error(td::Status::Error(ton::ErrorCode::cancelled, "worker: proxy connection closed or owner stopped"));
   }
 
   auto run_time() const {
@@ -64,6 +74,8 @@ class WorkerRunningRequest : public td::actor::Actor {
   ton::tl_object_ptr<cocoon_api::proxy_queryFinalInfo> create_final_info(bool success = true);
 
  private:
+  bool check_deadline();
+  http::HttpRequestHandle http_request_;
   std::string generate_worker_debug_inner();
   td::Result<std::string> process_payload(td::Slice payload, bool completed);
   void receive_http_error_payload(std::string payload, bool completed);

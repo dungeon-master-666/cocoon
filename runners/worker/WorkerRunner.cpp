@@ -24,6 +24,7 @@
 #include "tl/tl/tl_json.h"
 #include "auto/tl/cocoon_api_json.h"
 #include <memory>
+#include <cmath>
 
 #if __has_include(<unistd.h>)
 #include <unistd.h>
@@ -57,13 +58,20 @@ void WorkerRunner::proxy_request_payout(WorkerProxyInfo &proxy) {
 void WorkerRunner::receive_request(WorkerProxyInfo &proxy, TcpClient::ConnectionId connection_id,
                                    cocoon_api::proxy_runQueryEx &req) {
   auto conn = static_cast<WorkerProxyConnection *>(get_connection(connection_id));
-  if (!conn) {
+  if (!conn || !conn->is_ready()) {
     return;
   }
   auto proto_version = conn->proto_version();
-  if (active_requests_ >= max_active_requests_) {
+  if (active_requests_.count({connection_id, req.request_id_})) {
+    // Reusing an in-flight ID makes two terminal responses indistinguishable.
+    fail_connection(connection_id, td::Status::Error(ton::ErrorCode::protoviolation, "duplicate active request ID"));
+    return;
+  }
+  bool invalid_timeout = !std::isfinite(req.timeout_) || req.timeout_ <= 0;
+  if (invalid_timeout || active_requests_.size() >= static_cast<size_t>(max_active_requests_)) {
     td::BufferSlice res = cocoon::create_serialize_tl_object<cocoon_api::proxy_queryAnswerErrorEx>(
-        req.request_id_, ton::ErrorCode::error, "too many active queries", 1,
+        req.request_id_, ton::ErrorCode::error, invalid_timeout ? "invalid request timeout" : "too many active queries",
+        1,
         ton::create_tl_object<cocoon_api::proxy_queryFinalInfo>(
             (proto_version >= 2 ? 2 : 0), ton::create_tl_object<cocoon_api::tokensUsed>(0, 0, 0, 0, 0), "",
             td::Clocks::system(), td::Clocks::system()));
@@ -76,13 +84,27 @@ void WorkerRunner::receive_request(WorkerProxyInfo &proxy, TcpClient::Connection
   }
 
   proxy.update_payment_info(std::move(req.signed_payment_));
-  active_requests_++;
-
-  td::actor::create_actor<WorkerRunningRequest>(
+  auto request = td::actor::create_actor<WorkerRunningRequest>(
       PSTRING() << "request_" << req.request_id_.to_hex(), req.request_id_, connection_id, std::move(req.query_),
       req.private_key_, req.timeout_, forward_requests_to_, model_base_name(), req.coefficient_, proto_version,
-      (req.flags_ & 1) && req.enable_debug_, proxy.sc()->runner_config(), actor_id(this), scheduler(), stats_)
-      .release();
+      (req.flags_ & 1) && req.enable_debug_, proxy.sc()->runner_config(), actor_id(this), scheduler(), stats_);
+  active_requests_.emplace(RequestKey{connection_id, req.request_id_}, std::move(request));
+}
+
+void WorkerRunner::finish_request(TcpClient::ConnectionId connection_id, const td::Bits256 &proxy_request_id,
+                                  td::actor::ActorId<WorkerRunningRequest> request) {
+  auto it = active_requests_.find({connection_id, proxy_request_id});
+  // A stale completion cannot erase a later request reusing the ID.
+  if (it != active_requests_.end() && it->second.get() == request)
+    active_requests_.erase(it);
+}
+
+void WorkerRunner::cancel_requests(TcpClient::ConnectionId connection_id) {
+  auto it = active_requests_.lower_bound({connection_id, td::Bits256::zero()});
+  for (; it != active_requests_.end() && it->first.first == connection_id; ++it) {
+    td::actor::send_closure(it->second, &WorkerRunningRequest::cancel);
+  }
+  // Keep ownership/admission slots until each actor acknowledges termination.
 }
 
 /*
@@ -678,7 +700,7 @@ std::string WorkerRunner::http_generate_main() {
     sb << "<tr><td>coefficient</td><td>" << (coefficient_ * 0.001)
        << " <a href=\"/request/change_coefficient\">change</a></td></tr>\n";
     sb << "<tr><td>max_active_requests</td><td>" << max_active_requests_ << "</td></tr>\n";
-    sb << "<tr><td>active_requests</td><td>" << active_requests_ << "</td></tr>\n";
+    sb << "<tr><td>active_requests</td><td>" << active_requests_.size() << "</td></tr>\n";
     sb << "<tr><td>check proxy hash</td><td>" << (check_image_hashes() ? "YES" : "NO") << "</td></tr>\n";
     sb << "</table>\n";
   }
@@ -744,6 +766,7 @@ std::string WorkerRunner::http_generate_json_stats() {
     jb.stop_object();
   }
   jb.start_object("stats");
+  jb.add_element("active_requests", active_requests_.size());
   stats_->requests_received.to_jb(jb, "queries");
   stats_->requests_success.to_jb(jb, "success");
   stats_->requests_failed.to_jb(jb, "failed");

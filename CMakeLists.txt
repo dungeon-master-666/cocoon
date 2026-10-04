@@ -339,6 +339,8 @@ add_executable(test-answer-postprocessor EXCLUDE_FROM_ALL test/test-answer-postp
 target_link_libraries(test-answer-postprocessor PRIVATE cocoon_common)
 add_executable(test-http-client EXCLUDE_FROM_ALL test/test-http-client.cpp)
 target_link_libraries(test-http-client PRIVATE cocoon_common)
+add_executable(test-http-cancel EXCLUDE_FROM_ALL test/test-http-cancel.cpp)
+target_link_libraries(test-http-cancel PRIVATE cocoon_common)
 
 add_executable(client-runner 
   runners/ClientRunner.cpp 

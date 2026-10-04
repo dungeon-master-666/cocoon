@@ -14,6 +14,7 @@
 #include "td/utils/port/IPAddress.h"
 #include "ton/http/http-client.h"
 #include <memory>
+#include <map>
 
 namespace cocoon {
 
@@ -92,9 +93,9 @@ class WorkerRunner : public BaseRunner {
   /* PROXY REQUEST */
   void receive_request(WorkerProxyInfo &proxy, TcpClient::ConnectionId connection_id,
                        cocoon_api::proxy_runQueryEx &req);
-  void finish_request(const td::Bits256 &proxy_request_id, bool is_success) {
-    active_requests_--;
-  }
+  void finish_request(TcpClient::ConnectionId connection_id, const td::Bits256 &proxy_request_id,
+                      td::actor::ActorId<WorkerRunningRequest> request);
+  void cancel_requests(TcpClient::ConnectionId connection_id);
 
   /* ALLOCATORS */
   std::unique_ptr<ProxyOutboundConnection> allocate_proxy_outbound_connection(TcpClient::ConnectionId connection_id,
@@ -198,7 +199,8 @@ class WorkerRunner : public BaseRunner {
   std::string model_base_name_;
 
   td::int32 coefficient_;
-  td::int32 active_requests_{0};
+  using RequestKey = std::pair<TcpClient::ConnectionId, td::Bits256>;
+  std::map<RequestKey, td::actor::ActorOwn<WorkerRunningRequest>> active_requests_;
   td::int32 max_active_requests_{200};
 
   std::unique_ptr<td::Ed25519::PrivateKey> wallet_private_key_;

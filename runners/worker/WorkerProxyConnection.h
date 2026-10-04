@@ -14,6 +14,7 @@ class WorkerProxyConnection : public ProxyOutboundConnection {
       : ProxyOutboundConnection(runner, remote_app_type, remote_app_hash, verified_by, connection_id, target_id) {
   }
   void send_handshake() override;
+  void pre_close() override;
   void received_handshake_answer(td::BufferSlice answer);
   void received_compare_answer(td::BufferSlice answer);
   void received_extended_compare_answer(td::BufferSlice answer);

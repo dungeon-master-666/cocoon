@@ -44,8 +44,8 @@ void WorkerUplinkMonitor::send_request() {
     td::actor::Scheduler *scheduler_;
   };
 
-  http::run_http_request(addr_, http::HttpCallback::RequestType::Get, "/v1/models", {}, "", 30.0,
-                         std::make_unique<Cb>(actor_id(this), scheduler_));
+  request_ = http::run_http_request(addr_, http::HttpCallback::RequestType::Get, "/v1/models", {}, "", 30.0,
+                                    std::make_unique<Cb>(actor_id(this), scheduler_));
 }
 
 void WorkerUplinkMonitor::got_http_answer(td::int32 status_code) {

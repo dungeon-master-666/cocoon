@@ -8,8 +8,10 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <atomic>
+#include <cmath>
 
-#include "http.h"
+#include "http-client.h"
 #include "errorcode.h"
 
 namespace cocoon {
@@ -28,8 +30,9 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
   HttpClientSession(asio::io_context &io, const td::IPAddress &addr, HttpCallback::RequestType request_type,
                     std::string url, std::vector<std::pair<std::string, std::string>> headers, std::string payload,
                     double timeout, std::unique_ptr<HttpRequestCallback> callback)
-      : resolver_(io)
-      , stream_(io)
+      : strand_(asio::make_strand(io))
+      , stream_(strand_)
+      , timer_(strand_)
       , addr_(addr)
       , request_type_(request_type)
       , url_(std::move(url))
@@ -40,7 +43,34 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
   }
 
   void run() {
-    self_ = shared_from_this();
+    asio::post(strand_, [self = shared_from_this()] { self->start(); });
+  }
+
+  void cancel() {
+    if (cancel_requested_.exchange(true))
+      return;
+    asio::post(strand_, [self = shared_from_this()] {
+      self->fail(td::Status::Error(ton::ErrorCode::cancelled, "backend HTTP request cancelled"));
+    });
+  }
+
+ private:
+  using Clock = std::chrono::steady_clock;
+
+  void start() {
+    if (!std::isfinite(timeout_) || timeout_ <= 0 ||
+        timeout_ >= std::chrono::duration<double>(Clock::time_point::max() - created_at_).count()) {
+      return fail(td::Status::Error(ton::ErrorCode::timeout, "invalid backend HTTP timeout"));
+    }
+    deadline_ = created_at_ + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(timeout_));
+    if (stop_requested())
+      return;
+    timer_.expires_at(deadline_);
+    timer_.async_wait([self = shared_from_this()](beast::error_code error) {
+      if (!error)
+        self->fail(td::Status::Error(ton::ErrorCode::timeout, "backend HTTP deadline exceeded"));
+    });
+
     req_.version(11);  // http 1.1
     switch (request_type_) {
       case HttpCallback::RequestType::Get:
@@ -64,8 +94,14 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
     parser_.body_limit((std::numeric_limits<std::uint64_t>::max)());
     parser_.eager(true);
 
-    resolver_.async_resolve(addr_.get_ip_str().str(), PSTRING() << addr_.get_port(),
-                            beast::bind_front_handler(&HttpClientSession::on_resolve, shared_from_this()));
+    // The API already takes a resolved numeric IPAddress. Avoid introducing an
+    // uncancellable resolver job for a numeric address.
+    beast::error_code error;
+    auto address = asio::ip::make_address(addr_.get_ip_str().str(), error);
+    if (error)
+      return fail("address", error);
+    stream_.async_connect(tcp::endpoint(address, addr_.get_port()),
+                          beast::bind_front_handler(&HttpClientSession::on_connect, shared_from_this()));
   }
 
  private:
@@ -75,16 +111,9 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
     return !(name == "host" || name == "connection" || name == "transfer-encoding" || name == "content-length");
   }
 
-  void on_resolve(beast::error_code error, tcp::resolver::results_type results) {
-    if (error) {
-      return fail("resolve", std::move(error));
-    }
-
-    stream_.expires_after(std::chrono::seconds((int)timeout_));
-    stream_.async_connect(results, beast::bind_front_handler(&HttpClientSession::on_connect, shared_from_this()));
-  }
-
-  void on_connect(beast::error_code error, tcp::resolver::results_type::endpoint_type) {
+  void on_connect(beast::error_code error) {
+    if (stop_requested())
+      return;
     if (error) {
       return fail("connect", std::move(error));
     }
@@ -93,6 +122,8 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
   }
 
   void on_write(beast::error_code error, std::size_t) {
+    if (stop_requested())
+      return;
     if (error) {
       return fail("write", std::move(error));
     }
@@ -102,6 +133,8 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
   }
 
   void on_read_header(beast::error_code error, std::size_t) {
+    if (stop_requested())
+      return;
     if (error) {
       return fail("read_headers", std::move(error));
     }
@@ -124,16 +157,19 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
       headers.emplace_back(h.name_string(), h.value());
     }
 
-    payload_completed_ = parser_.is_done();
-    callback_->receive_answer(status_code, std::move(content_type), std::move(headers), "", payload_completed_);
-    if (payload_completed_) {
+    if (parser_.is_done()) {
       do_close();
+      auto callback = std::move(callback_);
+      callback->receive_answer(status_code, std::move(content_type), std::move(headers), "", true);
     } else {
+      callback_->receive_answer(status_code, std::move(content_type), std::move(headers), "", false);
       read_payload();
     }
   }
 
   void read_payload() {
+    if (stop_requested())
+      return;
     auto &b = parser_.get().body();
     b.data = body_buf_;
     b.size = sizeof(body_buf_);
@@ -143,6 +179,8 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
   }
 
   void on_read_payload(beast::error_code error, std::size_t) {
+    if (stop_requested())
+      return;
     auto &b = parser_.get().body();
 
     std::size_t bytes = sizeof(body_buf_) - b.size;
@@ -150,6 +188,8 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
     if (bytes > 0) {
       callback_->receive_payload_part(std::string(body_buf_, bytes), false);
     }
+    if (stop_requested())
+      return;
 
     if (error == http::error::need_buffer)
       error = {};
@@ -159,36 +199,59 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
     }
 
     if (parser_.is_done()) {
-      payload_completed_ = true;
-      callback_->receive_payload_part("", true);
-      return do_close();
+      do_close();
+      auto callback = std::move(callback_);
+      callback->receive_payload_part("", true);
+      return;
     }
 
     read_payload();
   }
 
   void do_close() {
+    completed_ = true;
+    timer_.cancel();
     beast::error_code error;
+    stream_.socket().cancel(error);
     stream_.socket().shutdown(tcp::socket::shutdown_both, error);
     stream_.socket().close(error);
-    self_ = nullptr;
   }
 
   void fail(const char *what, beast::error_code ec) {
+    if (completed_)
+      return;
     LOG(ERROR) << "failed http client: " << what << ": " << ec.message();
-    if (!payload_completed_) {
-      payload_completed_ = true;
-      callback_->receive_error(td::Status::Error(ec == beast::error::timeout || ec == asio::error::timed_out
-                                                     ? ton::ErrorCode::timeout
-                                                     : ton::ErrorCode::notready,
-                                                 PSTRING() << "backend HTTP " << what << ": " << ec.message()));
-    }
+    fail(td::Status::Error(ec == beast::error::timeout || ec == asio::error::timed_out ? ton::ErrorCode::timeout
+                                                                                       : ton::ErrorCode::notready,
+                           PSTRING() << "backend HTTP " << what << ": " << ec.message()));
+  }
+
+  void fail(td::Status error) {
+    if (completed_)
+      return;
     do_close();
+    auto callback = std::move(callback_);
+    callback->receive_error(std::move(error));
+  }
+
+  bool stop_requested() {
+    if (completed_)
+      return true;
+    if (cancel_requested_.load()) {
+      fail(td::Status::Error(ton::ErrorCode::cancelled, "backend HTTP request cancelled"));
+      return true;
+    }
+    if (Clock::now() >= deadline_) {
+      fail(td::Status::Error(ton::ErrorCode::timeout, "backend HTTP deadline exceeded"));
+      return true;
+    }
+    return false;
   }
 
  private:
-  tcp::resolver resolver_;
+  asio::strand<asio::io_context::executor_type> strand_;
   beast::tcp_stream stream_;
+  asio::steady_timer timer_;
   beast::flat_buffer buffer_;
 
   http::request<http::string_body> req_;
@@ -203,17 +266,24 @@ class HttpClientSession : public std::enable_shared_from_this<HttpClientSession>
   std::unique_ptr<HttpRequestCallback> callback_;
 
   char body_buf_[16 << 10];
-  std::shared_ptr<HttpClientSession> self_;
-
-  bool payload_completed_{false};
+  Clock::time_point created_at_ = Clock::now();
+  Clock::time_point deadline_;
+  std::atomic<bool> cancel_requested_{false};
+  bool completed_{false};
 };
 
-void run_http_request(const td::IPAddress &addr, HttpCallback::RequestType request_type, std::string url,
-                      std::vector<std::pair<std::string, std::string>> headers, std::string payload, double timeout,
-                      std::unique_ptr<HttpRequestCallback> callback) {
+void HttpRequestHandle::cancel() const {
+  if (auto session = session_.lock())
+    session->cancel();
+}
+
+HttpRequestHandle run_http_request(const td::IPAddress &addr, HttpCallback::RequestType request_type, std::string url,
+                                   std::vector<std::pair<std::string, std::string>> headers, std::string payload,
+                                   double timeout, std::unique_ptr<HttpRequestCallback> callback) {
   auto req = std::make_shared<HttpClientSession>(io_context(), addr, request_type, std::move(url), std::move(headers),
                                                  std::move(payload), timeout, std::move(callback));
   req->run();
+  return HttpRequestHandle(req);
 }
 
 }  // namespace http
