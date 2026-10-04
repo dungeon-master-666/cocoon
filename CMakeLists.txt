@@ -325,6 +325,8 @@ set(JSON_Install OFF CACHE INTERNAL "")
 add_subdirectory(third-party/nlohmann-json)
 find_package(Boost 1.71 REQUIRED COMPONENTS thread)
 
+add_subdirectory(pipeline)
+
 
 set(COMMON_LIBRARIES
   tdutils tdactor tdnet tddb cocoon_tl_api tl_api cocoon-tl-utils tonhttp tonlib tdnet_ported cocoon git nlohmann_json::nlohmann_json Boost::headers Boost::thread
