@@ -1,0 +1,44 @@
+{
+  "sglang_chunked_prefill": {
+    "run": "20261003234158-sglang-small-pp2",
+    "result": {
+      "run": "20261003234158-sglang-small-pp2",
+      "backend": "sglang",
+      "model": "small",
+      "pp": 2,
+      "passed": false,
+      "error": "CalledProcessError(1, ['ssh', '-i', '/Users/ms/.ssh/ms', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'ruslixag@144.76.224.249', 'sudo -n python3 /home/ruslixag/cocoon-pipeline-dev/host.py'])"
+    },
+    "log_evidence": [
+      "ValueError: token_to_kv_pool_allocator memory leak detected! self.max_total_num_tokens=4096, available_size=2048, evictable_size=0, protected_size=0, session_held=0"
+    ]
+  },
+  "vllm_default_rpc_deadline": {
+    "run": "20261003233636-vllm-large-pp2",
+    "result": {
+      "run": "20261003233636-vllm-large-pp2",
+      "backend": "vllm",
+      "model": "large",
+      "pp": 2,
+      "passed": false,
+      "error": "AssertionError('stage-loss request falsely succeeded')"
+    },
+    "log_evidence": [
+      "(EngineCore pid=91) ERROR 10-03 23:38:34 [multiproc_executor.py:314] Worker proc VllmWorker-0 died unexpectedly (exit code: None), shutting down executor.",
+      "(EngineCore pid=91) INFO 10-03 23:38:34 [multiproc_executor.py:479] [shutdown] Executor: all workers exited gracefully"
+    ],
+    "fault": {
+      "usage": null,
+      "finish_reason": null,
+      "done": false,
+      "error": "TimeoutError('timed out')",
+      "seconds": 62.140945271996316,
+      "content_chunks": 19,
+      "ttft_ms": 139.44129399897065,
+      "inter_chunk_ms_p50": 107.87213798903394,
+      "inter_chunk_ms_p95": 108.2914620055817,
+      "failure_mode": "client-timeout",
+      "passed": false
+    }
+  }
+}

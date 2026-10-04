@@ -1,0 +1,216 @@
+[
+  {
+    "hostname": "hetzner-cuda-01",
+    "os": "PRETTY_NAME=\"Ubuntu 26.04.1 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"26.04\"\nVERSION=\"26.04.1 LTS (Resolute Raccoon)\"\nVERSION_CODENAME=resolute\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=resolute\nLOGO=ubuntu-logo\n",
+    "memory": "MemTotal:       65614116 kB\nMemFree:         5701504 kB\nMemAvailable:   55931932 kB\nBuffers:          876700 kB\nCached:         48158152 kB\nSwapCached:            0 kB\nActive:          7929512 kB\nInactive:       48396216 kB\nActive(anon):    1140280 kB\nInactive(anon):  6569856 kB\nActive(file):    6789232 kB\nInactive(file): 41826360 kB\nUnevictable:        8480 kB\nMlocked:            8480 kB\nSwapTotal:             0 kB\nSwapFree:              0 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:              6992 kB\nWriteback:             0 kB\nAnonPages:       7299092 kB\nMapped:          2641644 kB\nShmem:            412968 kB\nKReclaimable:    2321708 kB\nSlab:            2710172 kB\nSReclaimable:    2220376 kB\nSUnreclaim:       489796 kB\nKernelStack:       15976 kB\nPageTables:        41028 kB\nSecPageTables:      6308 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    32807056 kB\nCommitted_AS:   16526960 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:       85640 kB\nVmallocChunk:          0 kB\nPercpu:            18800 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:         0 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:   1564672 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:          257668 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:      745280 kB\nDirectMap2M:    28391424 kB\nDirectMap1G:    37748736 kB\n",
+    "wireguard_tools": "wireguard-tools v1.0.20250521 - https://git.zx2c4.com/wireguard-tools/",
+    "iperf": "iperf 3.20 (cJSON 1.7.15)\nLinux hetzner-cuda-01 7.0.0-34-generic #34-Ubuntu SMP PREEMPT_DYNAMIC Wed Sep  2 14:29:37 UTC 2026 x86_64\nOptional features available: CPU affinity setting, IPv6 flow label, SCTP, TCP congestion algorithm setting, sendfile / zerocopy, socket pacing, authentication, bind to device, support IPv4 don't fragment, POSIX threads",
+    "docker": "{\"Platform\":{\"Name\":\"\"},\"Version\":\"29.1.3\",\"ApiVersion\":\"1.52\",\"MinAPIVersion\":\"1.44\",\"Os\":\"linux\",\"Arch\":\"amd64\",\"Components\":[{\"Name\":\"Engine\",\"Version\":\"29.1.3\",\"Details\":{\"ApiVersion\":\"1.52\",\"Arch\":\"amd64\",\"BuildTime\":\"Wed Apr 29 16:40:20 2026\",\"Experimental\":\"false\",\"GitCommit\":\"29.1.3-0ubuntu4.1\",\"GoVersion\":\"go1.24.13\",\"KernelVersion\":\"7.0.0-34-generic\",\"MinAPIVersion\":\"1.44\",\"Os\":\"linux\"}},{\"Name\":\"containerd\",\"Version\":\"2.2.2\",\"Details\":{\"GitCommit\":\"\"}},{\"Name\":\"runc\",\"Version\":\"1.4.0-0ubuntu1\",\"Details\":{\"GitCommit\":\"\"}},{\"Name\":\"docker-init\",\"Version\":\"0.19.0\",\"Details\":{\"GitCommit\":\"\"}}],\"GitCommit\":\"29.1.3-0ubuntu4.1\",\"GoVersion\":\"go1.24.13\",\"KernelVersion\":\"7.0.0-34-generic\",\"BuildTime\":\"2026-04-29T16:40:20.000000000+00:00\"}",
+    "interfaces": [
+      {
+        "ifindex": 1,
+        "ifname": "lo",
+        "flags": [
+          "LOOPBACK",
+          "UP",
+          "LOWER_UP"
+        ],
+        "mtu": 65536,
+        "qdisc": "noqueue",
+        "operstate": "UNKNOWN",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "txqlen": 1000,
+        "link_type": "loopback",
+        "address": "00:00:00:00:00:00",
+        "broadcast": "00:00:00:00:00:00"
+      },
+      {
+        "ifindex": 2,
+        "ifname": "enp4s0",
+        "flags": [
+          "BROADCAST",
+          "MULTICAST",
+          "UP",
+          "LOWER_UP"
+        ],
+        "mtu": 1500,
+        "qdisc": "pfifo_fast",
+        "operstate": "UP",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "txqlen": 1000,
+        "link_type": "ether",
+        "address": "10:7c:61:4a:ff:ac",
+        "broadcast": "ff:ff:ff:ff:ff:ff",
+        "altnames": [
+          "enx107c614affac"
+        ]
+      },
+      {
+        "ifindex": 3,
+        "link": "enp4s0",
+        "ifname": "enp4s0.4000",
+        "flags": [
+          "BROADCAST",
+          "MULTICAST",
+          "UP",
+          "LOWER_UP"
+        ],
+        "mtu": 1400,
+        "qdisc": "noqueue",
+        "operstate": "UP",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "txqlen": 1000,
+        "link_type": "ether",
+        "address": "10:7c:61:4a:ff:ac",
+        "broadcast": "ff:ff:ff:ff:ff:ff"
+      },
+      {
+        "ifindex": 4,
+        "ifname": "virbr0",
+        "flags": [
+          "NO-CARRIER",
+          "BROADCAST",
+          "MULTICAST",
+          "UP"
+        ],
+        "mtu": 1500,
+        "qdisc": "noqueue",
+        "operstate": "DOWN",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "txqlen": 1000,
+        "link_type": "ether",
+        "address": "52:54:00:04:ab:1f",
+        "broadcast": "ff:ff:ff:ff:ff:ff"
+      },
+      {
+        "ifindex": 5,
+        "ifname": "docker0",
+        "flags": [
+          "NO-CARRIER",
+          "BROADCAST",
+          "MULTICAST",
+          "UP"
+        ],
+        "mtu": 1500,
+        "qdisc": "noqueue",
+        "operstate": "DOWN",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "link_type": "ether",
+        "address": "f2:d8:55:f1:69:f6",
+        "broadcast": "ff:ff:ff:ff:ff:ff"
+      }
+    ]
+  },
+  {
+    "hostname": "hetzner-cuda-02",
+    "os": "PRETTY_NAME=\"Ubuntu 26.04 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"26.04\"\nVERSION=\"26.04 LTS (Resolute Raccoon)\"\nVERSION_CODENAME=resolute\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=resolute\nLOGO=ubuntu-logo\n",
+    "memory": "MemTotal:       65614184 kB\nMemFree:         4686036 kB\nMemAvailable:   63527200 kB\nBuffers:          424924 kB\nCached:         56702164 kB\nSwapCached:            0 kB\nActive:          1100540 kB\nInactive:       56243320 kB\nActive(anon):     205092 kB\nInactive(anon):    19744 kB\nActive(file):     895448 kB\nInactive(file): 56223576 kB\nUnevictable:        8796 kB\nMlocked:            8796 kB\nSwapTotal:             0 kB\nSwapFree:              0 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:              3368 kB\nWriteback:             4 kB\nAnonPages:        225368 kB\nMapped:           226992 kB\nShmem:              1696 kB\nKReclaimable:    2429060 kB\nSlab:            2769936 kB\nSReclaimable:    2327728 kB\nSUnreclaim:       442208 kB\nKernelStack:        7728 kB\nPageTables:         8156 kB\nSecPageTables:      6212 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    32807092 kB\nCommitted_AS:    1532752 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:       79056 kB\nVmallocChunk:          0 kB\nPercpu:            27520 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:         0 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:  24791040 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:          539024 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1191744 kB\nDirectMap2M:    45770752 kB\nDirectMap1G:    19922944 kB\n",
+    "wireguard_tools": "wireguard-tools v1.0.20250521 - https://git.zx2c4.com/wireguard-tools/",
+    "iperf": "iperf 3.20 (cJSON 1.7.15)\nLinux hetzner-cuda-02 7.0.0-22-generic #22-Ubuntu SMP PREEMPT_DYNAMIC Mon May 25 15:54:34 UTC 2026 x86_64\nOptional features available: CPU affinity setting, IPv6 flow label, SCTP, TCP congestion algorithm setting, sendfile / zerocopy, socket pacing, authentication, bind to device, support IPv4 don't fragment, POSIX threads",
+    "docker": "{\"Platform\":{\"Name\":\"\"},\"Version\":\"29.1.3\",\"ApiVersion\":\"1.52\",\"MinAPIVersion\":\"1.44\",\"Os\":\"linux\",\"Arch\":\"amd64\",\"Components\":[{\"Name\":\"Engine\",\"Version\":\"29.1.3\",\"Details\":{\"ApiVersion\":\"1.52\",\"Arch\":\"amd64\",\"BuildTime\":\"Wed Apr 29 16:40:20 2026\",\"Experimental\":\"false\",\"GitCommit\":\"29.1.3-0ubuntu4.1\",\"GoVersion\":\"go1.24.13\",\"KernelVersion\":\"7.0.0-22-generic\",\"MinAPIVersion\":\"1.44\",\"Os\":\"linux\"}},{\"Name\":\"containerd\",\"Version\":\"2.2.2\",\"Details\":{\"GitCommit\":\"\"}},{\"Name\":\"runc\",\"Version\":\"1.4.0-0ubuntu1\",\"Details\":{\"GitCommit\":\"\"}},{\"Name\":\"docker-init\",\"Version\":\"0.19.0\",\"Details\":{\"GitCommit\":\"\"}}],\"GitCommit\":\"29.1.3-0ubuntu4.1\",\"GoVersion\":\"go1.24.13\",\"KernelVersion\":\"7.0.0-22-generic\",\"BuildTime\":\"2026-04-29T16:40:20.000000000+00:00\"}",
+    "interfaces": [
+      {
+        "ifindex": 1,
+        "ifname": "lo",
+        "flags": [
+          "LOOPBACK",
+          "UP",
+          "LOWER_UP"
+        ],
+        "mtu": 65536,
+        "qdisc": "noqueue",
+        "operstate": "UNKNOWN",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "txqlen": 1000,
+        "link_type": "loopback",
+        "address": "00:00:00:00:00:00",
+        "broadcast": "00:00:00:00:00:00"
+      },
+      {
+        "ifindex": 2,
+        "ifname": "enp4s0",
+        "flags": [
+          "BROADCAST",
+          "MULTICAST",
+          "UP",
+          "LOWER_UP"
+        ],
+        "mtu": 1500,
+        "qdisc": "pfifo_fast",
+        "operstate": "UP",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "txqlen": 1000,
+        "link_type": "ether",
+        "address": "10:7c:61:49:f9:c7",
+        "broadcast": "ff:ff:ff:ff:ff:ff",
+        "altnames": [
+          "enx107c6149f9c7"
+        ]
+      },
+      {
+        "ifindex": 3,
+        "link": "enp4s0",
+        "ifname": "enp4s0.4000",
+        "flags": [
+          "BROADCAST",
+          "MULTICAST",
+          "UP",
+          "LOWER_UP"
+        ],
+        "mtu": 1400,
+        "qdisc": "noqueue",
+        "operstate": "UP",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "txqlen": 1000,
+        "link_type": "ether",
+        "address": "10:7c:61:49:f9:c7",
+        "broadcast": "ff:ff:ff:ff:ff:ff"
+      },
+      {
+        "ifindex": 4,
+        "ifname": "virbr0",
+        "flags": [
+          "NO-CARRIER",
+          "BROADCAST",
+          "MULTICAST",
+          "UP"
+        ],
+        "mtu": 1500,
+        "qdisc": "noqueue",
+        "operstate": "DOWN",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "txqlen": 1000,
+        "link_type": "ether",
+        "address": "52:54:00:32:a7:9e",
+        "broadcast": "ff:ff:ff:ff:ff:ff"
+      },
+      {
+        "ifindex": 5,
+        "ifname": "docker0",
+        "flags": [
+          "NO-CARRIER",
+          "BROADCAST",
+          "MULTICAST",
+          "UP"
+        ],
+        "mtu": 1500,
+        "qdisc": "noqueue",
+        "operstate": "DOWN",
+        "linkmode": "DEFAULT",
+        "group": "default",
+        "link_type": "ether",
+        "address": "3a:e5:41:96:ad:8f",
+        "broadcast": "ff:ff:ff:ff:ff:ff"
+      }
+    ]
+  }
+]

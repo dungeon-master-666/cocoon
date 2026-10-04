@@ -1,6 +1,6 @@
 # План разработки MVP: один Cocoon worker с pipeline
 
-Дата: 2026-10-04. Статус: шаг 1 реализован и проверен на нативном Mac; шаги 2–13 ожидают реализации.
+Дата: 2026-10-04. Статус: шаг 1 проверен на нативном Mac, шаг 2 — на двух RTX; шаги 3–13 ожидают реализации.
 
 Архитектура и ограничения описаны в [pipeline-design.md](/Users/ms/Developer/cocoon/pipeline-design.md). Весь pipeline представлен одним worker; внутренние стадии используют один выбранный backend — SGLang или vLLM — и обмениваются данными через WireGuard. Proxy сохраняет существующий контракт запросов и расчётов.
 
@@ -94,6 +94,16 @@ python3 benchmark/smoke-local.py --build-dir build/local --scenario all
 Основа: [локальный запуск](/Users/ms/Developer/cocoon/docs/deployment.md:80), [smoke-local.py](/Users/ms/Developer/cocoon/benchmark/smoke-local.py), [существующий тестовый HTTP server](/Users/ms/Developer/cocoon/benchmark/server.go).
 
 ### Шаг 2. Ранний эксперимент с GPU
+
+**Статус: выполнен (2026-10-04).** Добавлен dev-стенд [experiments/gpu-pipeline](experiments/gpu-pipeline/README.md): закреплённые SGLang/vLLM и модели, отдельные WG namespaces/ключи, запуск, измерения, проверки API/отказов и cleanup. На двух RTX прошли шесть GPU-запусков и девять локальных тестов. Для каждого backend сравнение Qwen3-0.6B PP=1/PP=2 дало одинаковые fixtures и logprobs; Qwen3-14B BF16 работает PP=2 без CPU offload при context limit 4096 и concurrency 1.
+
+Подтверждены NCCL Socket через `wg0`, участие обоих rank, длинный prefill (2070 prompt tokens) и ошибочное завершение активного запроса при смерти rank 1. Итоговый SGLang-профиль отключает chunked prefill из-за обнаруженной KV-ошибки; vLLM ограничивает RPC deadline до 30 секунд. Неудачные исходные профили и повторные проверки сохранены в [отчёте](experiments/gpu-pipeline/REPORT.md). После проверки тестовые процессы, туннели и ключи удалены. Это dev-проверка без CC, не квалификация production deployment.
+
+**Повторная полная проверка после подготовки хостов:**
+
+```bash
+python3 experiments/gpu-pipeline/pilot.py matrix
+```
 
 **Изменение для ревью:** минимальные скрипты запуска SGLang и vLLM на двух машинах: PP=2, TP=1, WireGuard и закреплённые версии. Полноценные agent/deployment пока не требуются; настройки стенда и ключи тестового туннеля отделены от production profile.
 

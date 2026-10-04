@@ -1,0 +1,2337 @@
+{
+  "date_local": "2026-10-04",
+  "mode": "dev-only",
+  "matrix": {
+    "sglang": {
+      "small_pp1": {
+        "run": "20261003234539-sglang-small-pp1-ec6d6c",
+        "backend": "sglang",
+        "model": "small",
+        "pp": 1,
+        "passed": true
+      },
+      "small_pp2": {
+        "run": "20261003234634-sglang-small-pp2-26a2c4",
+        "backend": "sglang",
+        "model": "small",
+        "pp": 2,
+        "passed": true
+      },
+      "comparison": {
+        "passed": true,
+        "max_logprob_absolute_difference": 0.0,
+        "tolerance": 0.15
+      },
+      "large_pp2": {
+        "run": "20261003234858-sglang-large-pp2-f0bcf3",
+        "backend": "sglang",
+        "model": "large",
+        "pp": 2,
+        "passed": true
+      }
+    },
+    "vllm": {
+      "small_pp1": {
+        "run": "20261003235113-vllm-small-pp1-b3758b",
+        "backend": "vllm",
+        "model": "small",
+        "pp": 1,
+        "passed": true
+      },
+      "small_pp2": {
+        "run": "20261003235222-vllm-small-pp2-0bba24",
+        "backend": "vllm",
+        "model": "small",
+        "pp": 2,
+        "passed": true
+      },
+      "comparison": {
+        "passed": true,
+        "max_logprob_absolute_difference": 0.0,
+        "tolerance": 0.15
+      },
+      "large_pp2": {
+        "run": "20261003235510-vllm-large-pp2-76186f",
+        "backend": "vllm",
+        "model": "large",
+        "pp": 2,
+        "passed": true
+      }
+    }
+  },
+  "trials": {
+    "20261003234539-sglang-small-pp1-ec6d6c": {
+      "result": {
+        "run": "20261003234539-sglang-small-pp1-ec6d6c",
+        "backend": "sglang",
+        "model": "small",
+        "pp": 1,
+        "passed": true
+      },
+      "versions": {
+        "python": "3.12.3",
+        "torch": "2.9.1+cu130",
+        "cuda": "13.0",
+        "packages": {
+          "sglang": "0.5.10.post1",
+          "transformers": "5.3.0",
+          "triton": "3.5.1",
+          "huggingface-hub": "1.9.2"
+        },
+        "weight_tensors": {
+          "BF16": {
+            "parameters": 751632384,
+            "bytes": 1503264768
+          }
+        },
+        "nccl_torch_reported": [
+          2,
+          27,
+          7
+        ],
+        "nccl_runtime_logged": []
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "image": "lmsysorg/sglang:v0.5.10.post1-cu130-runtime@sha256:715c461258624eae38124dcb1e1f620cbe307594fd3403ab92caf1b7017afd0f",
+          "argv": [
+            "python3",
+            "-m",
+            "sglang.launch_server",
+            "--model-path",
+            "/models/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--tp-size",
+            "1",
+            "--pp-size",
+            "1",
+            "--nnodes",
+            "1",
+            "--node-rank",
+            "0",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "30000",
+            "--disable-radix-cache",
+            "--enable-cache-report",
+            "--disable-cuda-graph",
+            "--disable-piecewise-cuda-graph",
+            "--disable-overlap-schedule",
+            "--chunked-prefill-size",
+            "-1",
+            "--attention-backend",
+            "triton",
+            "--sampling-backend",
+            "pytorch",
+            "--context-length",
+            "4096",
+            "--max-running-requests",
+            "1",
+            "--max-total-tokens",
+            "4096",
+            "--mem-fraction-static",
+            "0.9"
+          ],
+          "environment": {
+            "NCCL_NET": "Socket",
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_IB_DISABLE": "1",
+            "NCCL_SHM_DISABLE": "1",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "NCCL_DEBUG": "INFO",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "SGLANG_HOST_IP": "10.231.0.1",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "NCCL_P2P_DISABLE": "1",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "VLLM_HOST_IP": "10.231.0.1",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "NCCL_VERSION": "2.28.3-1"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 2052 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 2118 MiB, 0 %",
+          "peak_sampled_gpu_mib": 2118,
+          "peak_sampled_gpu_utilization_percent": 70,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: pW/hpjE9N8g5h+J5YuOzy3udhbVysFgeot0zGGdtplM=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 4u0cwGo2O74OdD3OgKjvnLtwRpB438uIbv97uK3NtiY=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 second ago\n  transfer: 180 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: pW/hpjE9N8g5h+J5YuOzy3udhbVysFgeot0zGGdtplM=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 4u0cwGo2O74OdD3OgKjvnLtwRpB438uIbv97uK3NtiY=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 41 seconds ago\n  transfer: 436 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "[2026-10-03 23:46:03] Load weight end. elapsed=0.19 s, type=Qwen3ForCausalLM, avail mem=18.16 GB, mem usage=1.18 GB."
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: pW/hpjE9N8g5h+J5YuOzy3udhbVysFgeot0zGGdtplM=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 4u0cwGo2O74OdD3OgKjvnLtwRpB438uIbv97uK3NtiY=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 23 seconds ago\n  transfer: 308 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": []
+        }
+      ],
+      "sse": {
+        "usage": {
+          "prompt_tokens": 31,
+          "total_tokens": 95,
+          "completion_tokens": 64,
+          "prompt_tokens_details": null,
+          "reasoning_tokens": 0
+        },
+        "finish_reason": "length",
+        "done": true,
+        "error": null,
+        "seconds": 0.505559198994888,
+        "content_chunks": 64,
+        "ttft_ms": 11.12017099512741,
+        "inter_chunk_ms_p50": 7.809967995854095,
+        "inter_chunk_ms_p95": 8.092482006759383
+      },
+      "cancel_recovery_seconds": 2.0334953389974544,
+      "long_prefill": {
+        "seconds": 0.08410309901228175,
+        "usage": {
+          "prompt_tokens": 2070,
+          "total_tokens": 2073,
+          "completion_tokens": 3,
+          "prompt_tokens_details": null,
+          "reasoning_tokens": 0
+        }
+      },
+      "fixtures": [
+        {
+          "prompt": "Reply with exactly OK.",
+          "text": "OK.",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 17,
+            "total_tokens": 20,
+            "completion_tokens": 3,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        },
+        {
+          "prompt": "What is 2 + 2? Answer with just the number.",
+          "text": "2",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 26,
+            "total_tokens": 28,
+            "completion_tokens": 2,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        },
+        {
+          "prompt": "Continue the sequence, using commas: 1, 2, 3, 4,",
+          "text": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 1",
+          "finish_reason": "length",
+          "usage": {
+            "prompt_tokens": 31,
+            "total_tokens": 95,
+            "completion_tokens": 64,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        }
+      ],
+      "isolation": [
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        },
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        }
+      ],
+      "cleanup": [
+        {
+          "stopped": "cocoon-pilot-20261003234539-sglang-small-pp1-ec6d6c",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        },
+        {
+          "stopped": "cocoon-pilot-20261003234539-sglang-small-pp1-ec6d6c",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        }
+      ],
+      "source_sha256": {
+        "pilot.py": "e86e5a870c5a6cc41a20e990d8c9ddd1d893610c9bb73a3c97b37a76b47cef89",
+        "metadata.py": "1c5225270803b8f58f79ffa771b11c5263a1d5ee39d679ad9295df4d698b74e4",
+        "host.py": "a65846b478ff1bda72fad0acded8f26435bf64b9cf42925b9ab4704cd2834225",
+        "nccl_probe.py": "b86fc7ad97da94e6e7c76d1c7449cf1ae212103d16788535480035076da809de",
+        "test_pilot.py": "d319f4f221b4a9b232115b0e632784dfdba63f61df4a12bf0e8fd22e8b92710b",
+        "probe.py": "6e08bfd73527555b5f2536557b38ffb661ed7b8df9389f37c3ebcb55e90b6681",
+        "evidence.py": "1be52cc45344b21b1adf48f89512b05fad0ea3796de5714566e0d5ffa8028514",
+        "fetch_models.py": "bf7205aba9cf111d8dee73588f70800919165226d72d9873809ff25410268c3c"
+      },
+      "raw_artifact_sha256": {
+        "api.json": "d34b6221d7372d014e5c38f5990495974975eea424eb8f49ac7b2ecb039f5319",
+        "before.json": "ce6662603729737a1bd195c6c49c461409243a47cb5ca676dafe2390a405156c",
+        "after.json": "2b9cc09dbcd87447089ffe47c1813e16a0bb15c67ae33c6d31fa45f6c8e4a92a",
+        "cleanup.json": "71917850068d47607904d64f97f1470edd714c0bf4b3281eb3b11a99ad71a818",
+        "profiles.json": "82142eae206a2a6963bba096c6e8e133c7e92a9a0115bf2bdd340d7f20d09b52",
+        "lab.json": "b08f0397043afade8a1d5283dcb740e7a5917978db4e1c8c49ad2d862f7b2870",
+        "model-manifest.json": "e66fe44f84d36b97a1808a81d0b8895126f02433d68fd76da6577647eaa677e1",
+        "rank0/server.log": "dcb41179066661897fb5cc917e380febbbd67d7d2a5d77a24252060ae452f77b"
+      }
+    },
+    "20261003234634-sglang-small-pp2-26a2c4": {
+      "result": {
+        "run": "20261003234634-sglang-small-pp2-26a2c4",
+        "backend": "sglang",
+        "model": "small",
+        "pp": 2,
+        "passed": true
+      },
+      "versions": {
+        "python": "3.12.3",
+        "torch": "2.9.1+cu130",
+        "cuda": "13.0",
+        "packages": {
+          "sglang": "0.5.10.post1",
+          "transformers": "5.3.0",
+          "triton": "3.5.1",
+          "huggingface-hub": "1.9.2"
+        },
+        "weight_tensors": {
+          "BF16": {
+            "parameters": 751632384,
+            "bytes": 1503264768
+          }
+        },
+        "nccl_torch_reported": [
+          2,
+          27,
+          7
+        ],
+        "nccl_runtime_logged": [
+          "2.28.3"
+        ]
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "image": "lmsysorg/sglang:v0.5.10.post1-cu130-runtime@sha256:715c461258624eae38124dcb1e1f620cbe307594fd3403ab92caf1b7017afd0f",
+          "argv": [
+            "python3",
+            "-m",
+            "sglang.launch_server",
+            "--model-path",
+            "/models/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--tp-size",
+            "1",
+            "--pp-size",
+            "2",
+            "--nnodes",
+            "2",
+            "--node-rank",
+            "0",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "30000",
+            "--disable-radix-cache",
+            "--enable-cache-report",
+            "--disable-cuda-graph",
+            "--disable-piecewise-cuda-graph",
+            "--disable-overlap-schedule",
+            "--chunked-prefill-size",
+            "-1",
+            "--attention-backend",
+            "triton",
+            "--sampling-backend",
+            "pytorch",
+            "--context-length",
+            "4096",
+            "--max-running-requests",
+            "1",
+            "--max-total-tokens",
+            "4096",
+            "--mem-fraction-static",
+            "0.9",
+            "--dist-init-addr",
+            "10.231.0.1:29500"
+          ],
+          "environment": {
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_IB_DISABLE": "1",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "VLLM_HOST_IP": "10.231.0.1",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "NCCL_SHM_DISABLE": "1",
+            "SGLANG_HOST_IP": "10.231.0.1",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "NCCL_NET": "Socket",
+            "NCCL_DEBUG": "INFO",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "NCCL_VERSION": "2.28.3-1"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 1400 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 1480 MiB, 0 %",
+          "peak_sampled_gpu_mib": 1480,
+          "peak_sampled_gpu_utilization_percent": 100,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: 4PbUhTLJky+RRiGvj5qZ+xEPAbr8i8sF0m5EY9X0TjA=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 7Q0V1MtTCazq99ai90JEBbxFIW2Tztm+/AW7wK5bC3Q=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 2 seconds ago\n  transfer: 180 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: 4PbUhTLJky+RRiGvj5qZ+xEPAbr8i8sF0m5EY9X0TjA=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 7Q0V1MtTCazq99ai90JEBbxFIW2Tztm+/AW7wK5bC3Q=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 minute, 50 seconds ago\n  transfer: 302.43 MiB received, 863.38 MiB sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "7e72132406d6:76:76 [0] NCCL INFO NET/Socket : Using [0]wg0:10.231.0.1<0>",
+            "7e72132406d6:76:76 [0] NCCL INFO Using network Socket",
+            "[2026-10-03 23:47:43 PP0] Load weight end. elapsed=0.14 s, type=Qwen3ForCausalLM, avail mem=18.52 GB, mem usage=0.75 GB.",
+            "7e72132406d6:76:76 [0] NCCL INFO Using network Socket"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: 4PbUhTLJky+RRiGvj5qZ+xEPAbr8i8sF0m5EY9X0TjA=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 7Q0V1MtTCazq99ai90JEBbxFIW2Tztm+/AW7wK5bC3Q=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 minute, 12 seconds ago\n  transfer: 300.90 MiB received, 851.42 MiB sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": [
+            "[2026-10-03 23:47:42 PP0] sglang is using nccl==2.28.3",
+            "7e72132406d6:76:76 [0] NCCL INFO NCCL version 2.28.3+cuda13.0"
+          ]
+        },
+        {
+          "rank": 1,
+          "image": "lmsysorg/sglang:v0.5.10.post1-cu130-runtime@sha256:715c461258624eae38124dcb1e1f620cbe307594fd3403ab92caf1b7017afd0f",
+          "argv": [
+            "python3",
+            "-m",
+            "sglang.launch_server",
+            "--model-path",
+            "/models/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--tp-size",
+            "1",
+            "--pp-size",
+            "2",
+            "--nnodes",
+            "2",
+            "--node-rank",
+            "1",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "30000",
+            "--disable-radix-cache",
+            "--enable-cache-report",
+            "--disable-cuda-graph",
+            "--disable-piecewise-cuda-graph",
+            "--disable-overlap-schedule",
+            "--chunked-prefill-size",
+            "-1",
+            "--attention-backend",
+            "triton",
+            "--sampling-backend",
+            "pytorch",
+            "--context-length",
+            "4096",
+            "--max-running-requests",
+            "1",
+            "--max-total-tokens",
+            "4096",
+            "--mem-fraction-static",
+            "0.9",
+            "--dist-init-addr",
+            "10.231.0.1:29500"
+          ],
+          "environment": {
+            "NCCL_NET": "Socket",
+            "NCCL_IB_DISABLE": "1",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "SGLANG_HOST_IP": "10.231.0.2",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "VLLM_HOST_IP": "10.231.0.2",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_SHM_DISABLE": "1",
+            "NCCL_DEBUG": "INFO",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "NCCL_VERSION": "2.28.3-1"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-a0aea187-6c11-dba2-5bc1-557a6caf9fc3, 595.91.07, 20475 MiB, 1372 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-a0aea187-6c11-dba2-5bc1-557a6caf9fc3, 595.91.07, 20475 MiB, 1502 MiB, 0 %",
+          "peak_sampled_gpu_mib": 1502,
+          "peak_sampled_gpu_utilization_percent": 100,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: 7Q0V1MtTCazq99ai90JEBbxFIW2Tztm+/AW7wK5bC3Q=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 4PbUhTLJky+RRiGvj5qZ+xEPAbr8i8sF0m5EY9X0TjA=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 2 seconds ago\n  transfer: 124 B received, 180 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: 7Q0V1MtTCazq99ai90JEBbxFIW2Tztm+/AW7wK5bC3Q=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 4PbUhTLJky+RRiGvj5qZ+xEPAbr8i8sF0m5EY9X0TjA=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 minute, 50 seconds ago\n  transfer: 863.38 MiB received, 302.43 MiB sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "e3a4feb1338c:66:66 [0] NCCL INFO NET/Socket : Using [0]wg0:10.231.0.2<0>",
+            "e3a4feb1338c:66:66 [0] NCCL INFO Using network Socket",
+            "[2026-10-03 23:47:43 PP1] Load weight end. elapsed=0.22 s, type=Qwen3ForCausalLM, avail mem=18.52 GB, mem usage=0.75 GB.",
+            "e3a4feb1338c:66:66 [0] NCCL INFO Using network Socket"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: 7Q0V1MtTCazq99ai90JEBbxFIW2Tztm+/AW7wK5bC3Q=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 4PbUhTLJky+RRiGvj5qZ+xEPAbr8i8sF0m5EY9X0TjA=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 minute, 13 seconds ago\n  transfer: 851.42 MiB received, 300.90 MiB sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": [
+            "e3a4feb1338c:66:66 [0] NCCL INFO NCCL version 2.28.3+cuda13.0"
+          ]
+        }
+      ],
+      "sse": {
+        "usage": {
+          "prompt_tokens": 31,
+          "total_tokens": 95,
+          "completion_tokens": 64,
+          "prompt_tokens_details": null,
+          "reasoning_tokens": 0
+        },
+        "finish_reason": "length",
+        "done": true,
+        "error": null,
+        "seconds": 2.3725009549962124,
+        "content_chunks": 64,
+        "ttft_ms": 45.26322400488425,
+        "inter_chunk_ms_p50": 37.48680200078525,
+        "inter_chunk_ms_p95": 42.97228199720848
+      },
+      "cancel_recovery_seconds": 2.1333965419908054,
+      "long_prefill": {
+        "seconds": 0.1998546830000123,
+        "usage": {
+          "prompt_tokens": 2070,
+          "total_tokens": 2073,
+          "completion_tokens": 3,
+          "prompt_tokens_details": null,
+          "reasoning_tokens": 0
+        }
+      },
+      "fixtures": [
+        {
+          "prompt": "Reply with exactly OK.",
+          "text": "OK.",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 17,
+            "total_tokens": 20,
+            "completion_tokens": 3,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        },
+        {
+          "prompt": "What is 2 + 2? Answer with just the number.",
+          "text": "2",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 26,
+            "total_tokens": 28,
+            "completion_tokens": 2,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        },
+        {
+          "prompt": "Continue the sequence, using commas: 1, 2, 3, 4,",
+          "text": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 1",
+          "finish_reason": "length",
+          "usage": {
+            "prompt_tokens": 31,
+            "total_tokens": 95,
+            "completion_tokens": 64,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        }
+      ],
+      "isolation": [
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        },
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        }
+      ],
+      "cleanup": [
+        {
+          "stopped": "cocoon-pilot-20261003234634-sglang-small-pp2-26a2c4",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        },
+        {
+          "stopped": "cocoon-pilot-20261003234634-sglang-small-pp2-26a2c4",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        }
+      ],
+      "source_sha256": {
+        "pilot.py": "e86e5a870c5a6cc41a20e990d8c9ddd1d893610c9bb73a3c97b37a76b47cef89",
+        "metadata.py": "1c5225270803b8f58f79ffa771b11c5263a1d5ee39d679ad9295df4d698b74e4",
+        "host.py": "a65846b478ff1bda72fad0acded8f26435bf64b9cf42925b9ab4704cd2834225",
+        "nccl_probe.py": "b86fc7ad97da94e6e7c76d1c7449cf1ae212103d16788535480035076da809de",
+        "test_pilot.py": "d319f4f221b4a9b232115b0e632784dfdba63f61df4a12bf0e8fd22e8b92710b",
+        "probe.py": "6e08bfd73527555b5f2536557b38ffb661ed7b8df9389f37c3ebcb55e90b6681",
+        "evidence.py": "1be52cc45344b21b1adf48f89512b05fad0ea3796de5714566e0d5ffa8028514",
+        "fetch_models.py": "bf7205aba9cf111d8dee73588f70800919165226d72d9873809ff25410268c3c"
+      },
+      "fault": {
+        "usage": null,
+        "finish_reason": null,
+        "done": false,
+        "error": null,
+        "seconds": 2.878974688996095,
+        "content_chunks": 78,
+        "ttft_ms": 53.116840004804544,
+        "inter_chunk_ms_p50": 36.61274700425565,
+        "inter_chunk_ms_p95": 43.972486004349776,
+        "failure_mode": "incomplete-eof",
+        "passed": true
+      },
+      "capture": [
+        {
+          "packets": 50000,
+          "wireguard_udp": 50000,
+          "tcp": 0,
+          "other_udp": 0,
+          "passed": true
+        },
+        {
+          "packets": 50000,
+          "wireguard_udp": 50000,
+          "tcp": 0,
+          "other_udp": 0,
+          "passed": true
+        }
+      ],
+      "nccl": {
+        "rank": 0,
+        "torch": "2.9.1+cu130",
+        "cuda": "13.0",
+        "measurements": [
+          {
+            "bytes": 16384,
+            "iterations": 30,
+            "seconds": 0.0600843040010659,
+            "round_trip_ms": 2.0028101333688633,
+            "payload_mbit_s": 130.88809350043377
+          },
+          {
+            "bytes": 65536,
+            "iterations": 30,
+            "seconds": 0.04942561399366241,
+            "round_trip_ms": 1.6475204664554137,
+            "payload_mbit_s": 636.4570403522677
+          },
+          {
+            "bytes": 67108864,
+            "iterations": 4,
+            "seconds": 4.828750474000117,
+            "round_trip_ms": 1207.1876185000292,
+            "payload_mbit_s": 889.4572869577306
+          }
+        ],
+        "env": {
+          "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+          "NCCL_SHM_DISABLE": "1",
+          "NCCL_DEBUG": "INFO",
+          "NCCL_SOCKET_IFNAME": "=wg0",
+          "NCCL_P2P_DISABLE": "1",
+          "NCCL_SOCKET_FAMILY": "AF_INET",
+          "GLOO_SOCKET_IFNAME": "wg0",
+          "NCCL_IB_DISABLE": "1",
+          "NCCL_NET": "Socket",
+          "NCCL_VERSION": "2.28.3-1"
+        },
+        "nccl_torch_reported": [
+          2,
+          27,
+          7
+        ],
+        "nccl_runtime_logged": [
+          "2.28.3"
+        ]
+      },
+      "network": {
+        "lan": {
+          "ping": "PING 192.168.100.3 (192.168.100.3) 1292(1320) bytes of data.\n1300 bytes from 192.168.100.3: icmp_seq=1 ttl=64 time=0.758 ms\n1300 bytes from 192.168.100.3: icmp_seq=2 ttl=64 time=0.931 ms\n1300 bytes from 192.168.100.3: icmp_seq=3 ttl=64 time=0.663 ms\n1300 bytes from 192.168.100.3: icmp_seq=4 ttl=64 time=0.916 ms\n1300 bytes from 192.168.100.3: icmp_seq=5 ttl=64 time=0.964 ms\n1300 bytes from 192.168.100.3: icmp_seq=6 ttl=64 time=0.693 ms\n1300 bytes from 192.168.100.3: icmp_seq=7 ttl=64 time=0.943 ms\n1300 bytes from 192.168.100.3: icmp_seq=8 ttl=64 time=0.576 ms\n\n--- 192.168.100.3 ping statistics ---\n8 packets transmitted, 8 received, 0% packet loss, time 1419ms\nrtt min/avg/max/mdev = 0.576/0.805/0.964/0.141 ms",
+          "iperf_end": {
+            "streams": [
+              {
+                "sender": {
+                  "socket": 5,
+                  "start": 0,
+                  "end": 5.002002,
+                  "seconds": 5.002002,
+                  "bytes": 585629696,
+                  "bits_per_second": 936632485.9526246,
+                  "retransmits": 0,
+                  "reorder": 0,
+                  "max_snd_cwnd": 459668,
+                  "max_snd_wnd": 1762304,
+                  "max_rtt": 2702,
+                  "min_rtt": 2586,
+                  "mean_rtt": 2662,
+                  "sender": true
+                },
+                "receiver": {
+                  "socket": 5,
+                  "start": 0,
+                  "end": 5.004943,
+                  "seconds": 5.002002,
+                  "bytes": 584581120,
+                  "bits_per_second": 934406038.1906447,
+                  "sender": true
+                }
+              }
+            ],
+            "sum_sent": {
+              "start": 0,
+              "end": 5.002002,
+              "seconds": 5.002002,
+              "bytes": 585629696,
+              "bits_per_second": 936632485.9526246,
+              "retransmits": 0,
+              "sender": true
+            },
+            "sum_received": {
+              "start": 0,
+              "end": 5.004943,
+              "seconds": 5.004943,
+              "bytes": 584581120,
+              "bits_per_second": 934406038.1906447,
+              "sender": true
+            },
+            "cpu_utilization_percent": {
+              "host_total": 5.244920554295305,
+              "host_user": 0.07364424774907664,
+              "host_system": 5.171276306546228,
+              "remote_total": 10.934321940771467,
+              "remote_user": 0.5047532277593296,
+              "remote_system": 10.429568713012136
+            },
+            "sender_tcp_congestion": "cubic",
+            "receiver_tcp_congestion": "cubic"
+          },
+          "head_system_cpu_busy_percent": 2.231689997971191
+        },
+        "wireguard": {
+          "ping": "PING 10.231.0.2 (10.231.0.2) 1292(1320) bytes of data.\n1300 bytes from 10.231.0.2: icmp_seq=1 ttl=64 time=1.39 ms\n1300 bytes from 10.231.0.2: icmp_seq=2 ttl=64 time=1.68 ms\n1300 bytes from 10.231.0.2: icmp_seq=3 ttl=64 time=1.63 ms\n1300 bytes from 10.231.0.2: icmp_seq=4 ttl=64 time=1.55 ms\n1300 bytes from 10.231.0.2: icmp_seq=5 ttl=64 time=1.74 ms\n1300 bytes from 10.231.0.2: icmp_seq=6 ttl=64 time=1.68 ms\n1300 bytes from 10.231.0.2: icmp_seq=7 ttl=64 time=1.41 ms\n1300 bytes from 10.231.0.2: icmp_seq=8 ttl=64 time=1.60 ms\n\n--- 10.231.0.2 ping statistics ---\n8 packets transmitted, 8 received, 0% packet loss, time 1408ms\nrtt min/avg/max/mdev = 1.392/1.585/1.740/0.119 ms",
+          "iperf_end": {
+            "streams": [
+              {
+                "sender": {
+                  "socket": 5,
+                  "start": 0,
+                  "end": 5.001261,
+                  "seconds": 5.001261,
+                  "bytes": 558366720,
+                  "bits_per_second": 893161496.6705396,
+                  "retransmits": 0,
+                  "reorder": 0,
+                  "max_snd_cwnd": 626392,
+                  "max_snd_wnd": 870400,
+                  "max_rtt": 2433,
+                  "min_rtt": 1863,
+                  "mean_rtt": 2186,
+                  "sender": true
+                },
+                "receiver": {
+                  "socket": 5,
+                  "start": 0,
+                  "end": 5.004212,
+                  "seconds": 5.001261,
+                  "bytes": 556531712,
+                  "bits_per_second": 889701254.8629035,
+                  "sender": true
+                }
+              }
+            ],
+            "sum_sent": {
+              "start": 0,
+              "end": 5.001261,
+              "seconds": 5.001261,
+              "bytes": 558366720,
+              "bits_per_second": 893161496.6705396,
+              "retransmits": 0,
+              "sender": true
+            },
+            "sum_received": {
+              "start": 0,
+              "end": 5.004212,
+              "seconds": 5.004212,
+              "bytes": 556531712,
+              "bits_per_second": 889701254.8629035,
+              "sender": true
+            },
+            "cpu_utilization_percent": {
+              "host_total": 2.2140521293371145,
+              "host_user": 0.06665379384488757,
+              "host_system": 2.1473384309441337,
+              "remote_total": 20.068465817748077,
+              "remote_user": 1.6301147285037176,
+              "remote_system": 18.43833110622593
+            },
+            "sender_tcp_congestion": "cubic",
+            "receiver_tcp_congestion": "cubic"
+          },
+          "head_system_cpu_busy_percent": 5.017721870873584
+        }
+      },
+      "raw_artifact_sha256": {
+        "api.json": "abf23d3709cc5f96ee60abcbc5534b5a892cc355e0e3250ecf1ffa3cdd19920e",
+        "before.json": "f4fc242f0cbff16a11e5bada1cf54c136691783d1d6b5c08956af05cbbab7784",
+        "after.json": "b573908a0d8288d1f800f5619e2ea9b5386b9ea185fbbc502d350d6352ad8191",
+        "cleanup.json": "14eb64fdedb6546571fe141e01cc8af66ccd3e803c5e71718948fed8b08a3c46",
+        "profiles.json": "82142eae206a2a6963bba096c6e8e133c7e92a9a0115bf2bdd340d7f20d09b52",
+        "lab.json": "b08f0397043afade8a1d5283dcb740e7a5917978db4e1c8c49ad2d862f7b2870",
+        "model-manifest.json": "e66fe44f84d36b97a1808a81d0b8895126f02433d68fd76da6577647eaa677e1",
+        "rank0/server.log": "6d2ff74f07254e8af18f0f10524d2a78ed36de8845be56dea4bcf18a727cd44d",
+        "rank1/server.log": "428ebdf5123edcfbcc74a56c2f527df82700a9d8e3f65318b42c18a2887bbb1c",
+        "fault.json": "8091f1dca65287395cf00500807c0c13358f6eb1de7e53275fb2b7c63b499cdd",
+        "captures.json": "f00b9c9bf04187572caf4e96deabe39899653ba32781fe7e43b4f3a581ce39d4",
+        "nccl-0.json": "e9927ea74c3e19b999f2737c9e48c90d65c63cd440926cad18343af1cbaa27dd",
+        "nccl-1.json": "3eab93393b023a3035aad2e3b208be368af688aea1d7b8935b703bb2ba8670c1"
+      }
+    },
+    "20261003234858-sglang-large-pp2-f0bcf3": {
+      "result": {
+        "run": "20261003234858-sglang-large-pp2-f0bcf3",
+        "backend": "sglang",
+        "model": "large",
+        "pp": 2,
+        "passed": true
+      },
+      "versions": {
+        "python": "3.12.3",
+        "torch": "2.9.1+cu130",
+        "cuda": "13.0",
+        "packages": {
+          "sglang": "0.5.10.post1",
+          "transformers": "5.3.0",
+          "triton": "3.5.1",
+          "huggingface-hub": "1.9.2"
+        },
+        "weight_tensors": {
+          "BF16": {
+            "parameters": 14768307200,
+            "bytes": 29536614400
+          }
+        },
+        "nccl_torch_reported": [
+          2,
+          27,
+          7
+        ],
+        "nccl_runtime_logged": [
+          "2.28.3"
+        ]
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "image": "lmsysorg/sglang:v0.5.10.post1-cu130-runtime@sha256:715c461258624eae38124dcb1e1f620cbe307594fd3403ab92caf1b7017afd0f",
+          "argv": [
+            "python3",
+            "-m",
+            "sglang.launch_server",
+            "--model-path",
+            "/models/Qwen3-14B/40c069824f4251a91eefaf281ebe4c544efd3e18",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--tp-size",
+            "1",
+            "--pp-size",
+            "2",
+            "--nnodes",
+            "2",
+            "--node-rank",
+            "0",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "30000",
+            "--disable-radix-cache",
+            "--enable-cache-report",
+            "--disable-cuda-graph",
+            "--disable-piecewise-cuda-graph",
+            "--disable-overlap-schedule",
+            "--chunked-prefill-size",
+            "-1",
+            "--attention-backend",
+            "triton",
+            "--sampling-backend",
+            "pytorch",
+            "--context-length",
+            "4096",
+            "--max-running-requests",
+            "1",
+            "--max-total-tokens",
+            "4096",
+            "--mem-fraction-static",
+            "0.9",
+            "--dist-init-addr",
+            "10.231.0.1:29500"
+          ],
+          "environment": {
+            "NCCL_NET": "Socket",
+            "NCCL_IB_DISABLE": "1",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "VLLM_HOST_IP": "10.231.0.1",
+            "SGLANG_HOST_IP": "10.231.0.1",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "NCCL_SHM_DISABLE": "1",
+            "NCCL_DEBUG": "INFO",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "NCCL_VERSION": "2.28.3-1"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 14860 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 15204 MiB, 0 %",
+          "peak_sampled_gpu_mib": 15204,
+          "peak_sampled_gpu_utilization_percent": 100,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: 34Ka/7cieXakDqHE1Z9IHRxxKT4neu8dAwkw0PdJ6ic=\n  private key: (hidden)\n  listening port: 51888\n\npeer: OchxQ87veeRlkJisTsloN3wSpsvvqYSxKzJWjtV30TI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 second ago\n  transfer: 180 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: 34Ka/7cieXakDqHE1Z9IHRxxKT4neu8dAwkw0PdJ6ic=\n  private key: (hidden)\n  listening port: 51888\n\npeer: OchxQ87veeRlkJisTsloN3wSpsvvqYSxKzJWjtV30TI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 minute, 35 seconds ago\n  transfer: 288.02 MiB received, 336.43 MiB sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "455602de97b6:76:76 [0] NCCL INFO NET/Socket : Using [0]wg0:10.231.0.1<0>",
+            "455602de97b6:76:76 [0] NCCL INFO Using network Socket",
+            "[2026-10-03 23:49:46 PP0] Load weight end. elapsed=2.72 s, type=Qwen3ForCausalLM, avail mem=5.49 GB, mem usage=13.77 GB.",
+            "455602de97b6:76:76 [0] NCCL INFO Using network Socket"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: 34Ka/7cieXakDqHE1Z9IHRxxKT4neu8dAwkw0PdJ6ic=\n  private key: (hidden)\n  listening port: 51888\n\npeer: OchxQ87veeRlkJisTsloN3wSpsvvqYSxKzJWjtV30TI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 51 seconds ago\n  transfer: 285.11 MiB received, 285.20 MiB sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": [
+            "[2026-10-03 23:49:42 PP0] sglang is using nccl==2.28.3",
+            "455602de97b6:76:76 [0] NCCL INFO NCCL version 2.28.3+cuda13.0"
+          ]
+        },
+        {
+          "rank": 1,
+          "image": "lmsysorg/sglang:v0.5.10.post1-cu130-runtime@sha256:715c461258624eae38124dcb1e1f620cbe307594fd3403ab92caf1b7017afd0f",
+          "argv": [
+            "python3",
+            "-m",
+            "sglang.launch_server",
+            "--model-path",
+            "/models/Qwen3-14B/40c069824f4251a91eefaf281ebe4c544efd3e18",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--tp-size",
+            "1",
+            "--pp-size",
+            "2",
+            "--nnodes",
+            "2",
+            "--node-rank",
+            "1",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "30000",
+            "--disable-radix-cache",
+            "--enable-cache-report",
+            "--disable-cuda-graph",
+            "--disable-piecewise-cuda-graph",
+            "--disable-overlap-schedule",
+            "--chunked-prefill-size",
+            "-1",
+            "--attention-backend",
+            "triton",
+            "--sampling-backend",
+            "pytorch",
+            "--context-length",
+            "4096",
+            "--max-running-requests",
+            "1",
+            "--max-total-tokens",
+            "4096",
+            "--mem-fraction-static",
+            "0.9",
+            "--dist-init-addr",
+            "10.231.0.1:29500"
+          ],
+          "environment": {
+            "SGLANG_HOST_IP": "10.231.0.2",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "NCCL_IB_DISABLE": "1",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "NCCL_NET": "Socket",
+            "NCCL_SHM_DISABLE": "1",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "VLLM_HOST_IP": "10.231.0.2",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_DEBUG": "INFO",
+            "NCCL_VERSION": "2.28.3-1"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-a0aea187-6c11-dba2-5bc1-557a6caf9fc3, 595.91.07, 20475 MiB, 14832 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-a0aea187-6c11-dba2-5bc1-557a6caf9fc3, 595.91.07, 20475 MiB, 15274 MiB, 0 %",
+          "peak_sampled_gpu_mib": 15274,
+          "peak_sampled_gpu_utilization_percent": 100,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: OchxQ87veeRlkJisTsloN3wSpsvvqYSxKzJWjtV30TI=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 34Ka/7cieXakDqHE1Z9IHRxxKT4neu8dAwkw0PdJ6ic=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 second ago\n  transfer: 124 B received, 180 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: OchxQ87veeRlkJisTsloN3wSpsvvqYSxKzJWjtV30TI=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 34Ka/7cieXakDqHE1Z9IHRxxKT4neu8dAwkw0PdJ6ic=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 minute, 35 seconds ago\n  transfer: 336.43 MiB received, 288.02 MiB sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "6a06661e5c04:66:66 [0] NCCL INFO NET/Socket : Using [0]wg0:10.231.0.2<0>",
+            "6a06661e5c04:66:66 [0] NCCL INFO Using network Socket",
+            "[2026-10-03 23:49:45 PP1] Load weight end. elapsed=1.66 s, type=Qwen3ForCausalLM, avail mem=5.49 GB, mem usage=13.77 GB.",
+            "6a06661e5c04:66:66 [0] NCCL INFO Using network Socket"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: OchxQ87veeRlkJisTsloN3wSpsvvqYSxKzJWjtV30TI=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 34Ka/7cieXakDqHE1Z9IHRxxKT4neu8dAwkw0PdJ6ic=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 51 seconds ago\n  transfer: 285.20 MiB received, 285.11 MiB sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": [
+            "6a06661e5c04:66:66 [0] NCCL INFO NCCL version 2.28.3+cuda13.0"
+          ]
+        }
+      ],
+      "sse": {
+        "usage": {
+          "prompt_tokens": 31,
+          "total_tokens": 61,
+          "completion_tokens": 30,
+          "prompt_tokens_details": null,
+          "reasoning_tokens": 0
+        },
+        "finish_reason": "stop",
+        "done": true,
+        "error": null,
+        "seconds": 3.26030541700311,
+        "content_chunks": 29,
+        "ttft_ms": 127.488024008926,
+        "inter_chunk_ms_p50": 107.9843215047731,
+        "inter_chunk_ms_p95": 108.29100199043751
+      },
+      "cancel_recovery_seconds": 2.5049996219895547,
+      "long_prefill": {
+        "seconds": 1.6852767069940455,
+        "usage": {
+          "prompt_tokens": 2070,
+          "total_tokens": 2072,
+          "completion_tokens": 2,
+          "prompt_tokens_details": null,
+          "reasoning_tokens": 0
+        }
+      },
+      "fixtures": [
+        {
+          "prompt": "Reply with exactly OK.",
+          "text": "OK.",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 17,
+            "total_tokens": 20,
+            "completion_tokens": 3,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        },
+        {
+          "prompt": "What is 2 + 2? Answer with just the number.",
+          "text": "4",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 26,
+            "total_tokens": 28,
+            "completion_tokens": 2,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        },
+        {
+          "prompt": "Continue the sequence, using commas: 1, 2, 3, 4,",
+          "text": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 31,
+            "total_tokens": 61,
+            "completion_tokens": 30,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0
+          }
+        }
+      ],
+      "isolation": [
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        },
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        }
+      ],
+      "cleanup": [
+        {
+          "stopped": "cocoon-pilot-20261003234858-sglang-large-pp2-f0bcf3",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        },
+        {
+          "stopped": "cocoon-pilot-20261003234858-sglang-large-pp2-f0bcf3",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        }
+      ],
+      "source_sha256": {
+        "pilot.py": "e86e5a870c5a6cc41a20e990d8c9ddd1d893610c9bb73a3c97b37a76b47cef89",
+        "metadata.py": "1c5225270803b8f58f79ffa771b11c5263a1d5ee39d679ad9295df4d698b74e4",
+        "host.py": "a65846b478ff1bda72fad0acded8f26435bf64b9cf42925b9ab4704cd2834225",
+        "nccl_probe.py": "b86fc7ad97da94e6e7c76d1c7449cf1ae212103d16788535480035076da809de",
+        "test_pilot.py": "d319f4f221b4a9b232115b0e632784dfdba63f61df4a12bf0e8fd22e8b92710b",
+        "probe.py": "6e08bfd73527555b5f2536557b38ffb661ed7b8df9389f37c3ebcb55e90b6681",
+        "evidence.py": "1be52cc45344b21b1adf48f89512b05fad0ea3796de5714566e0d5ffa8028514",
+        "fetch_models.py": "bf7205aba9cf111d8dee73588f70800919165226d72d9873809ff25410268c3c"
+      },
+      "fault": {
+        "usage": null,
+        "finish_reason": null,
+        "done": false,
+        "error": null,
+        "seconds": 6.266923046990996,
+        "content_chunks": 20,
+        "ttft_ms": 139.3956679967232,
+        "inter_chunk_ms_p50": 108.15381500287913,
+        "inter_chunk_ms_p95": 108.64266799762845,
+        "failure_mode": "incomplete-eof",
+        "passed": true
+      },
+      "capture": [
+        {
+          "packets": 50000,
+          "wireguard_udp": 50000,
+          "tcp": 0,
+          "other_udp": 0,
+          "passed": true
+        },
+        {
+          "packets": 50000,
+          "wireguard_udp": 50000,
+          "tcp": 0,
+          "other_udp": 0,
+          "passed": true
+        }
+      ],
+      "nccl": {
+        "rank": 0,
+        "torch": "2.9.1+cu130",
+        "cuda": "13.0",
+        "measurements": [
+          {
+            "bytes": 16384,
+            "iterations": 30,
+            "seconds": 0.05760979899787344,
+            "round_trip_ms": 1.920326633262448,
+            "payload_mbit_s": 136.51011002989782
+          },
+          {
+            "bytes": 65536,
+            "iterations": 30,
+            "seconds": 0.05051481899863575,
+            "round_trip_ms": 1.683827299954525,
+            "payload_mbit_s": 622.733697231491
+          },
+          {
+            "bytes": 67108864,
+            "iterations": 4,
+            "seconds": 4.825572325993562,
+            "round_trip_ms": 1206.3930814983905,
+            "payload_mbit_s": 890.043088332675
+          }
+        ],
+        "env": {
+          "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+          "NCCL_SHM_DISABLE": "1",
+          "NCCL_DEBUG": "INFO",
+          "NCCL_SOCKET_IFNAME": "=wg0",
+          "NCCL_P2P_DISABLE": "1",
+          "NCCL_SOCKET_FAMILY": "AF_INET",
+          "GLOO_SOCKET_IFNAME": "wg0",
+          "NCCL_IB_DISABLE": "1",
+          "NCCL_NET": "Socket",
+          "NCCL_VERSION": "2.28.3-1"
+        },
+        "nccl_torch_reported": [
+          2,
+          27,
+          7
+        ],
+        "nccl_runtime_logged": [
+          "2.28.3"
+        ]
+      },
+      "raw_artifact_sha256": {
+        "api.json": "dd6da135da48287038d8ce82aecab85abe5a6128717f27a9d01a9d2330c90630",
+        "before.json": "bffcc0247e186b36e0914e9cbeae49ea0b02babd0b58f4606df562f23f27f3ff",
+        "after.json": "4407988ce22d4a295b97b9ad128761808c8d8e957f8cfece1f6542f6399610fa",
+        "cleanup.json": "2d76050d6b9aa165483fc1f23677d2a30745e357883e9f5bbf5a98104e409b0f",
+        "profiles.json": "82142eae206a2a6963bba096c6e8e133c7e92a9a0115bf2bdd340d7f20d09b52",
+        "lab.json": "b08f0397043afade8a1d5283dcb740e7a5917978db4e1c8c49ad2d862f7b2870",
+        "model-manifest.json": "7689d512a517d98aa684df5e2b0b0b90a51358220465f2b5b6c4eaa81dda0a93",
+        "rank0/server.log": "c4104c8e5b017063202e16a5c668d4005c662c02a42fe077163694188cdf2fa6",
+        "rank1/server.log": "29e0d25d9500aa1bfd6cf783b592c51000fefe7958d7c7c94ac54d4e4fc5be57",
+        "fault.json": "0de27dfe42bc186c581835e2fba76e9cadfcff7f8f6d9d7d2276225fcea721a7",
+        "captures.json": "f00b9c9bf04187572caf4e96deabe39899653ba32781fe7e43b4f3a581ce39d4",
+        "nccl-0.json": "903c1171b2e7ad4184eba2778311e078ad27e89f8fe4cdc5d105d82c8985dec3",
+        "nccl-1.json": "87079b4069cdab3c2f1e0a2d3cafaeb14ead98877e14c0354fc3283dd54c9a89"
+      }
+    },
+    "20261003235113-vllm-small-pp1-b3758b": {
+      "result": {
+        "run": "20261003235113-vllm-small-pp1-b3758b",
+        "backend": "vllm",
+        "model": "small",
+        "pp": 1,
+        "passed": true
+      },
+      "versions": {
+        "python": "3.12.3",
+        "torch": "2.13.0+cu129",
+        "cuda": "12.9",
+        "packages": {
+          "vllm": "0.29.0+cu129",
+          "transformers": "5.16.1",
+          "triton": "3.7.1",
+          "huggingface-hub": "1.30.0"
+        },
+        "weight_tensors": {
+          "BF16": {
+            "parameters": 751632384,
+            "bytes": 1503264768
+          }
+        },
+        "nccl_torch_reported": [
+          2,
+          29,
+          7
+        ],
+        "nccl_runtime_logged": []
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "image": "vllm/vllm-openai:v0.29.0-cu129@sha256:7ef5a35d1ef8ce2cf9d671dd91eec6e367c5849262e0362b4d3d4a26be0d87d2",
+          "argv": [
+            "vllm",
+            "serve",
+            "/models/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--distributed-executor-backend",
+            "mp",
+            "--tensor-parallel-size",
+            "1",
+            "--pipeline-parallel-size",
+            "1",
+            "--nnodes",
+            "1",
+            "--node-rank",
+            "0",
+            "--master-addr",
+            "10.231.0.1",
+            "--master-port",
+            "29501",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "1",
+            "--max-num-batched-tokens",
+            "4096",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--cpu-offload-gb",
+            "0",
+            "--enforce-eager",
+            "--no-enable-prefix-caching",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "30000"
+          ],
+          "environment": {
+            "NCCL_NET": "Socket",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_DEBUG": "INFO",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "SGLANG_HOST_IP": "10.231.0.1",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_IB_DISABLE": "1",
+            "VLLM_HOST_IP": "10.231.0.1",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "NCCL_SHM_DISABLE": "1",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 18088 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 18172 MiB, 0 %",
+          "peak_sampled_gpu_mib": 18172,
+          "peak_sampled_gpu_utilization_percent": 85,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: a/Q1JX/DwWW1j0RLGyxwSD+xI+vujhRnAnXd6zFA71U=\n  private key: (hidden)\n  listening port: 51888\n\npeer: eWj3k53NGNrxvxmtVS22XMu7vJTr2Bggs2AIc69o7EI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 2 seconds ago\n  transfer: 180 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: a/Q1JX/DwWW1j0RLGyxwSD+xI+vujhRnAnXd6zFA71U=\n  private key: (hidden)\n  listening port: 51888\n\npeer: eWj3k53NGNrxvxmtVS22XMu7vJTr2Bggs2AIc69o7EI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 52 seconds ago\n  transfer: 500 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "(Worker pid=86) INFO 10-03 23:51:58 [parallel_state.py:2119] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A",
+            "(Worker pid=86) INFO 10-03 23:52:00 [model_runner.py:404] Model loading took 1.12 GiB memory and 1.344878 seconds"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: a/Q1JX/DwWW1j0RLGyxwSD+xI+vujhRnAnXd6zFA71U=\n  private key: (hidden)\n  listening port: 51888\n\npeer: eWj3k53NGNrxvxmtVS22XMu7vJTr2Bggs2AIc69o7EI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 48 seconds ago\n  transfer: 468 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": []
+        }
+      ],
+      "sse": {
+        "usage": {
+          "prompt_tokens": 31,
+          "total_tokens": 95,
+          "completion_tokens": 64
+        },
+        "finish_reason": "length",
+        "done": true,
+        "error": null,
+        "seconds": 0.5108189530001255,
+        "content_chunks": 64,
+        "ttft_ms": 39.42071000346914,
+        "inter_chunk_ms_p50": 7.464909998816438,
+        "inter_chunk_ms_p95": 7.721686008153483
+      },
+      "cancel_recovery_seconds": 0.0388238659943454,
+      "long_prefill": {
+        "seconds": 0.08305046999885235,
+        "usage": {
+          "prompt_tokens": 2070,
+          "total_tokens": 2073,
+          "completion_tokens": 3,
+          "prompt_tokens_details": null,
+          "completion_tokens_details": null
+        }
+      },
+      "fixtures": [
+        {
+          "prompt": "Reply with exactly OK.",
+          "text": "OK.",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 17,
+            "total_tokens": 20,
+            "completion_tokens": 3,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        },
+        {
+          "prompt": "What is 2 + 2? Answer with just the number.",
+          "text": "2",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 26,
+            "total_tokens": 28,
+            "completion_tokens": 2,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        },
+        {
+          "prompt": "Continue the sequence, using commas: 1, 2, 3, 4,",
+          "text": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 1",
+          "finish_reason": "length",
+          "usage": {
+            "prompt_tokens": 31,
+            "total_tokens": 95,
+            "completion_tokens": 64,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        }
+      ],
+      "isolation": [
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        },
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        }
+      ],
+      "cleanup": [
+        {
+          "stopped": "cocoon-pilot-20261003235113-vllm-small-pp1-b3758b",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        },
+        {
+          "stopped": "cocoon-pilot-20261003235113-vllm-small-pp1-b3758b",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        }
+      ],
+      "source_sha256": {
+        "pilot.py": "e86e5a870c5a6cc41a20e990d8c9ddd1d893610c9bb73a3c97b37a76b47cef89",
+        "metadata.py": "1c5225270803b8f58f79ffa771b11c5263a1d5ee39d679ad9295df4d698b74e4",
+        "host.py": "a65846b478ff1bda72fad0acded8f26435bf64b9cf42925b9ab4704cd2834225",
+        "nccl_probe.py": "b86fc7ad97da94e6e7c76d1c7449cf1ae212103d16788535480035076da809de",
+        "test_pilot.py": "d319f4f221b4a9b232115b0e632784dfdba63f61df4a12bf0e8fd22e8b92710b",
+        "probe.py": "6e08bfd73527555b5f2536557b38ffb661ed7b8df9389f37c3ebcb55e90b6681",
+        "evidence.py": "1be52cc45344b21b1adf48f89512b05fad0ea3796de5714566e0d5ffa8028514",
+        "fetch_models.py": "bf7205aba9cf111d8dee73588f70800919165226d72d9873809ff25410268c3c"
+      },
+      "raw_artifact_sha256": {
+        "api.json": "9222c38a16ba2458991f5d21e24c564902921ffee2f8d55b88e744c66dec5b54",
+        "before.json": "9ac5a45bcbf14d4edc89d1fea17a4eafac0ed0b4efb2f91194ccfaed750ac658",
+        "after.json": "82a8ec88423eb34f7b1a78d8949f62652b58afd3d1aaf3b8e9ac78c7bebebc62",
+        "cleanup.json": "d1eba2ad8300cfe009b8682d2f0ae206160037b84c3b05e770e96b786c39d245",
+        "profiles.json": "82142eae206a2a6963bba096c6e8e133c7e92a9a0115bf2bdd340d7f20d09b52",
+        "lab.json": "b08f0397043afade8a1d5283dcb740e7a5917978db4e1c8c49ad2d862f7b2870",
+        "model-manifest.json": "e66fe44f84d36b97a1808a81d0b8895126f02433d68fd76da6577647eaa677e1",
+        "rank0/server.log": "c34b9593fc0795b8ff9678b2566384dc14849546aed6d545cf2b0f32eaca023b"
+      }
+    },
+    "20261003235222-vllm-small-pp2-0bba24": {
+      "result": {
+        "run": "20261003235222-vllm-small-pp2-0bba24",
+        "backend": "vllm",
+        "model": "small",
+        "pp": 2,
+        "passed": true
+      },
+      "versions": {
+        "python": "3.12.3",
+        "torch": "2.13.0+cu129",
+        "cuda": "12.9",
+        "packages": {
+          "vllm": "0.29.0+cu129",
+          "transformers": "5.16.1",
+          "triton": "3.7.1",
+          "huggingface-hub": "1.30.0"
+        },
+        "weight_tensors": {
+          "BF16": {
+            "parameters": 751632384,
+            "bytes": 1503264768
+          }
+        },
+        "nccl_torch_reported": [
+          2,
+          29,
+          7
+        ],
+        "nccl_runtime_logged": [
+          "2.30.7"
+        ]
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "image": "vllm/vllm-openai:v0.29.0-cu129@sha256:7ef5a35d1ef8ce2cf9d671dd91eec6e367c5849262e0362b4d3d4a26be0d87d2",
+          "argv": [
+            "vllm",
+            "serve",
+            "/models/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--distributed-executor-backend",
+            "mp",
+            "--tensor-parallel-size",
+            "1",
+            "--pipeline-parallel-size",
+            "2",
+            "--nnodes",
+            "2",
+            "--node-rank",
+            "0",
+            "--master-addr",
+            "10.231.0.1",
+            "--master-port",
+            "29501",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "1",
+            "--max-num-batched-tokens",
+            "4096",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--cpu-offload-gb",
+            "0",
+            "--enforce-eager",
+            "--no-enable-prefix-caching",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "30000"
+          ],
+          "environment": {
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_IB_DISABLE": "1",
+            "SGLANG_HOST_IP": "10.231.0.1",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "NCCL_NET": "Socket",
+            "NCCL_DEBUG": "INFO",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "VLLM_HOST_IP": "10.231.0.1",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_SHM_DISABLE": "1"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 18248 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 18332 MiB, 0 %",
+          "peak_sampled_gpu_mib": 18332,
+          "peak_sampled_gpu_utilization_percent": 100,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: +s1Y7HetWaVehqK9pQ0Unh/sbPT3LQzi6iOiPfbpgXQ=\n  private key: (hidden)\n  listening port: 51888\n\npeer: Vqf9QLuE39DJ3bUCrIaBuXcnp8Y0OP9/QW4RfktlARE=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 second ago\n  transfer: 180 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: +s1Y7HetWaVehqK9pQ0Unh/sbPT3LQzi6iOiPfbpgXQ=\n  private key: (hidden)\n  listening port: 51888\n\npeer: Vqf9QLuE39DJ3bUCrIaBuXcnp8Y0OP9/QW4RfktlARE=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 minute, 48 seconds ago\n  transfer: 301.36 MiB received, 861.56 MiB sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "719824c8ff93:113:113 [0] NCCL INFO NET/Socket : Using [0]wg0:10.231.0.1<0>",
+            "719824c8ff93:113:113 [0] NCCL INFO Using network Socket",
+            "(Worker pid=113) INFO 10-03 23:53:53 [parallel_state.py:2119] rank 0 in world size 2 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A",
+            "(Worker_PP0 pid=113) INFO 10-03 23:53:54 [model_runner.py:404] Model loading took 0.71 GiB memory and 0.713522 seconds",
+            "719824c8ff93:113:113 [0] NCCL INFO Using network Socket",
+            "719824c8ff93:113:113 [0] NCCL INFO Using network Socket"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: +s1Y7HetWaVehqK9pQ0Unh/sbPT3LQzi6iOiPfbpgXQ=\n  private key: (hidden)\n  listening port: 51888\n\npeer: Vqf9QLuE39DJ3bUCrIaBuXcnp8Y0OP9/QW4RfktlARE=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 minute, 43 seconds ago\n  transfer: 300.63 MiB received, 850.77 MiB sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": [
+            "(Worker pid=113) INFO 10-03 23:53:52 [pynccl.py:113] vLLM is using nccl==2.30.7",
+            "719824c8ff93:113:113 [0] NCCL INFO NCCL version 2.30.7+cuda12.9"
+          ]
+        },
+        {
+          "rank": 1,
+          "image": "vllm/vllm-openai:v0.29.0-cu129@sha256:7ef5a35d1ef8ce2cf9d671dd91eec6e367c5849262e0362b4d3d4a26be0d87d2",
+          "argv": [
+            "vllm",
+            "serve",
+            "/models/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--distributed-executor-backend",
+            "mp",
+            "--tensor-parallel-size",
+            "1",
+            "--pipeline-parallel-size",
+            "2",
+            "--nnodes",
+            "2",
+            "--node-rank",
+            "1",
+            "--master-addr",
+            "10.231.0.1",
+            "--master-port",
+            "29501",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "1",
+            "--max-num-batched-tokens",
+            "4096",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--cpu-offload-gb",
+            "0",
+            "--enforce-eager",
+            "--no-enable-prefix-caching",
+            "--headless"
+          ],
+          "environment": {
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "NCCL_NET": "Socket",
+            "NCCL_SHM_DISABLE": "1",
+            "NCCL_DEBUG": "INFO",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "SGLANG_HOST_IP": "10.231.0.2",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "VLLM_HOST_IP": "10.231.0.2",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "NCCL_IB_DISABLE": "1",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-a0aea187-6c11-dba2-5bc1-557a6caf9fc3, 595.91.07, 20475 MiB, 18272 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-a0aea187-6c11-dba2-5bc1-557a6caf9fc3, 595.91.07, 20475 MiB, 18356 MiB, 0 %",
+          "peak_sampled_gpu_mib": 18356,
+          "peak_sampled_gpu_utilization_percent": 100,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: Vqf9QLuE39DJ3bUCrIaBuXcnp8Y0OP9/QW4RfktlARE=\n  private key: (hidden)\n  listening port: 51888\n\npeer: +s1Y7HetWaVehqK9pQ0Unh/sbPT3LQzi6iOiPfbpgXQ=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 second ago\n  transfer: 124 B received, 180 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: Vqf9QLuE39DJ3bUCrIaBuXcnp8Y0OP9/QW4RfktlARE=\n  private key: (hidden)\n  listening port: 51888\n\npeer: +s1Y7HetWaVehqK9pQ0Unh/sbPT3LQzi6iOiPfbpgXQ=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 minute, 48 seconds ago\n  transfer: 861.56 MiB received, 301.36 MiB sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "130354b951a2:71:71 [0] NCCL INFO NET/Socket : Using [0]wg0:10.231.0.2<0>",
+            "130354b951a2:71:71 [0] NCCL INFO Using network Socket",
+            "(Worker pid=71) INFO 10-03 23:53:53 [parallel_state.py:2119] rank 1 in world size 2 is assigned as DP rank 0, PP rank 1, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A",
+            "(Worker_PP1 pid=71) INFO 10-03 23:53:54 [model_runner.py:404] Model loading took 0.71 GiB memory and 0.789778 seconds",
+            "130354b951a2:71:71 [0] NCCL INFO Using network Socket",
+            "130354b951a2:71:71 [0] NCCL INFO Using network Socket"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: Vqf9QLuE39DJ3bUCrIaBuXcnp8Y0OP9/QW4RfktlARE=\n  private key: (hidden)\n  listening port: 51888\n\npeer: +s1Y7HetWaVehqK9pQ0Unh/sbPT3LQzi6iOiPfbpgXQ=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 minute, 43 seconds ago\n  transfer: 850.77 MiB received, 300.63 MiB sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": [
+            "130354b951a2:71:71 [0] NCCL INFO NCCL version 2.30.7+cuda12.9"
+          ]
+        }
+      ],
+      "sse": {
+        "usage": {
+          "prompt_tokens": 31,
+          "total_tokens": 95,
+          "completion_tokens": 64
+        },
+        "finish_reason": "length",
+        "done": true,
+        "error": null,
+        "seconds": 0.44192570200539194,
+        "content_chunks": 64,
+        "ttft_ms": 52.53472899494227,
+        "inter_chunk_ms_p50": 6.101879000198096,
+        "inter_chunk_ms_p95": 6.675892989733256
+      },
+      "cancel_recovery_seconds": 0.03192826500162482,
+      "long_prefill": {
+        "seconds": 0.15762516799441073,
+        "usage": {
+          "prompt_tokens": 2070,
+          "total_tokens": 2073,
+          "completion_tokens": 3,
+          "prompt_tokens_details": null,
+          "completion_tokens_details": null
+        }
+      },
+      "fixtures": [
+        {
+          "prompt": "Reply with exactly OK.",
+          "text": "OK.",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 17,
+            "total_tokens": 20,
+            "completion_tokens": 3,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        },
+        {
+          "prompt": "What is 2 + 2? Answer with just the number.",
+          "text": "2",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 26,
+            "total_tokens": 28,
+            "completion_tokens": 2,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        },
+        {
+          "prompt": "Continue the sequence, using commas: 1, 2, 3, 4,",
+          "text": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 1",
+          "finish_reason": "length",
+          "usage": {
+            "prompt_tokens": 31,
+            "total_tokens": 95,
+            "completion_tokens": 64,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        }
+      ],
+      "isolation": [
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        },
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        }
+      ],
+      "cleanup": [
+        {
+          "stopped": "cocoon-pilot-20261003235222-vllm-small-pp2-0bba24",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        },
+        {
+          "stopped": "cocoon-pilot-20261003235222-vllm-small-pp2-0bba24",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        }
+      ],
+      "source_sha256": {
+        "pilot.py": "e86e5a870c5a6cc41a20e990d8c9ddd1d893610c9bb73a3c97b37a76b47cef89",
+        "metadata.py": "1c5225270803b8f58f79ffa771b11c5263a1d5ee39d679ad9295df4d698b74e4",
+        "host.py": "a65846b478ff1bda72fad0acded8f26435bf64b9cf42925b9ab4704cd2834225",
+        "nccl_probe.py": "b86fc7ad97da94e6e7c76d1c7449cf1ae212103d16788535480035076da809de",
+        "test_pilot.py": "d319f4f221b4a9b232115b0e632784dfdba63f61df4a12bf0e8fd22e8b92710b",
+        "probe.py": "6e08bfd73527555b5f2536557b38ffb661ed7b8df9389f37c3ebcb55e90b6681",
+        "evidence.py": "1be52cc45344b21b1adf48f89512b05fad0ea3796de5714566e0d5ffa8028514",
+        "fetch_models.py": "bf7205aba9cf111d8dee73588f70800919165226d72d9873809ff25410268c3c"
+      },
+      "fault": {
+        "usage": null,
+        "finish_reason": null,
+        "done": true,
+        "error": {
+          "message": "EngineCore encountered an issue. See stack trace (above) for the root cause.",
+          "type": "InternalServerError",
+          "param": null,
+          "code": 500
+        },
+        "seconds": 32.986893801004044,
+        "content_chunks": 454,
+        "ttft_ms": 46.40762199414894,
+        "inter_chunk_ms_p50": 6.162812991533428,
+        "inter_chunk_ms_p95": 6.997629010584205,
+        "failure_mode": "transport-error",
+        "passed": true
+      },
+      "capture": [
+        {
+          "packets": 50000,
+          "wireguard_udp": 50000,
+          "tcp": 0,
+          "other_udp": 0,
+          "passed": true
+        },
+        {
+          "packets": 50000,
+          "wireguard_udp": 50000,
+          "tcp": 0,
+          "other_udp": 0,
+          "passed": true
+        }
+      ],
+      "nccl": {
+        "rank": 0,
+        "torch": "2.13.0+cu129",
+        "cuda": "12.9",
+        "measurements": [
+          {
+            "bytes": 16384,
+            "iterations": 30,
+            "seconds": 0.05851826099387836,
+            "round_trip_ms": 1.9506086997959453,
+            "payload_mbit_s": 134.3908698999564
+          },
+          {
+            "bytes": 65536,
+            "iterations": 30,
+            "seconds": 0.051701694013900124,
+            "round_trip_ms": 1.7233898004633375,
+            "payload_mbit_s": 608.4380908591241
+          },
+          {
+            "bytes": 67108864,
+            "iterations": 4,
+            "seconds": 4.8299143409967655,
+            "round_trip_ms": 1207.4785852491914,
+            "payload_mbit_s": 889.2429539679234
+          }
+        ],
+        "env": {
+          "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+          "NCCL_DEBUG": "INFO",
+          "NCCL_SHM_DISABLE": "1",
+          "NCCL_SOCKET_IFNAME": "=wg0",
+          "NCCL_P2P_DISABLE": "1",
+          "NCCL_SOCKET_FAMILY": "AF_INET",
+          "GLOO_SOCKET_IFNAME": "wg0",
+          "NCCL_IB_DISABLE": "1",
+          "NCCL_NET": "Socket"
+        },
+        "nccl_torch_reported": [
+          2,
+          29,
+          7
+        ],
+        "nccl_runtime_logged": [
+          "2.30.7"
+        ]
+      },
+      "network": {
+        "lan": {
+          "ping": "PING 192.168.100.3 (192.168.100.3) 1292(1320) bytes of data.\n1300 bytes from 192.168.100.3: icmp_seq=1 ttl=64 time=0.676 ms\n1300 bytes from 192.168.100.3: icmp_seq=2 ttl=64 time=0.629 ms\n1300 bytes from 192.168.100.3: icmp_seq=3 ttl=64 time=0.780 ms\n1300 bytes from 192.168.100.3: icmp_seq=4 ttl=64 time=0.963 ms\n1300 bytes from 192.168.100.3: icmp_seq=5 ttl=64 time=0.771 ms\n1300 bytes from 192.168.100.3: icmp_seq=6 ttl=64 time=0.905 ms\n1300 bytes from 192.168.100.3: icmp_seq=7 ttl=64 time=0.821 ms\n1300 bytes from 192.168.100.3: icmp_seq=8 ttl=64 time=0.945 ms\n\n--- 192.168.100.3 ping statistics ---\n8 packets transmitted, 8 received, 0% packet loss, time 1429ms\nrtt min/avg/max/mdev = 0.629/0.811/0.963/0.113 ms",
+          "iperf_end": {
+            "streams": [
+              {
+                "sender": {
+                  "socket": 5,
+                  "start": 0,
+                  "end": 5.002031,
+                  "seconds": 5.002031,
+                  "bytes": 585236480,
+                  "bits_per_second": 935998165.5451556,
+                  "retransmits": 0,
+                  "reorder": 0,
+                  "max_snd_cwnd": 463712,
+                  "max_snd_wnd": 1389568,
+                  "max_rtt": 2717,
+                  "min_rtt": 2637,
+                  "mean_rtt": 2685,
+                  "sender": true
+                },
+                "receiver": {
+                  "socket": 5,
+                  "start": 0,
+                  "end": 5.004766,
+                  "seconds": 5.002031,
+                  "bytes": 584581120,
+                  "bits_per_second": 934439084.6644977,
+                  "sender": true
+                }
+              }
+            ],
+            "sum_sent": {
+              "start": 0,
+              "end": 5.002031,
+              "seconds": 5.002031,
+              "bytes": 585236480,
+              "bits_per_second": 935998165.5451556,
+              "retransmits": 0,
+              "sender": true
+            },
+            "sum_received": {
+              "start": 0,
+              "end": 5.004766,
+              "seconds": 5.004766,
+              "bytes": 584581120,
+              "bits_per_second": 934439084.6644977,
+              "sender": true
+            },
+            "cpu_utilization_percent": {
+              "host_total": 5.3574121467459,
+              "host_user": 0.1365209118678118,
+              "host_system": 5.220871261079715,
+              "remote_total": 10.80675364408419,
+              "remote_user": 0.3698231945818674,
+              "remote_system": 10.436890488057122
+            },
+            "sender_tcp_congestion": "cubic",
+            "receiver_tcp_congestion": "cubic"
+          },
+          "head_system_cpu_busy_percent": 3.974454365079365
+        },
+        "wireguard": {
+          "ping": "PING 10.231.0.2 (10.231.0.2) 1292(1320) bytes of data.\n1300 bytes from 10.231.0.2: icmp_seq=1 ttl=64 time=1.26 ms\n1300 bytes from 10.231.0.2: icmp_seq=2 ttl=64 time=1.76 ms\n1300 bytes from 10.231.0.2: icmp_seq=3 ttl=64 time=1.57 ms\n1300 bytes from 10.231.0.2: icmp_seq=4 ttl=64 time=1.79 ms\n1300 bytes from 10.231.0.2: icmp_seq=5 ttl=64 time=1.95 ms\n1300 bytes from 10.231.0.2: icmp_seq=6 ttl=64 time=1.73 ms\n1300 bytes from 10.231.0.2: icmp_seq=7 ttl=64 time=1.57 ms\n1300 bytes from 10.231.0.2: icmp_seq=8 ttl=64 time=1.70 ms\n\n--- 10.231.0.2 ping statistics ---\n8 packets transmitted, 8 received, 0% packet loss, time 1407ms\nrtt min/avg/max/mdev = 1.260/1.666/1.953/0.191 ms",
+          "iperf_end": {
+            "streams": [
+              {
+                "sender": {
+                  "socket": 5,
+                  "start": 0,
+                  "end": 5.001284,
+                  "seconds": 5.001284,
+                  "bytes": 557449216,
+                  "bits_per_second": 891689759.669717,
+                  "retransmits": 0,
+                  "reorder": 0,
+                  "max_snd_cwnd": 641608,
+                  "max_snd_wnd": 3978240,
+                  "max_rtt": 2383,
+                  "min_rtt": 2072,
+                  "mean_rtt": 2307,
+                  "sender": true
+                },
+                "receiver": {
+                  "socket": 5,
+                  "start": 0,
+                  "end": 5.004195,
+                  "seconds": 5.001284,
+                  "bytes": 556269568,
+                  "bits_per_second": 889285198.518443,
+                  "sender": true
+                }
+              }
+            ],
+            "sum_sent": {
+              "start": 0,
+              "end": 5.001284,
+              "seconds": 5.001284,
+              "bytes": 557449216,
+              "bits_per_second": 891689759.669717,
+              "retransmits": 0,
+              "sender": true
+            },
+            "sum_received": {
+              "start": 0,
+              "end": 5.004195,
+              "seconds": 5.004195,
+              "bytes": 556269568,
+              "bits_per_second": 889285198.518443,
+              "sender": true
+            },
+            "cpu_utilization_percent": {
+              "host_total": 2.33784704850304,
+              "host_user": 0.0597738177900777,
+              "host_system": 2.2780732307129616,
+              "remote_total": 19.837229931356166,
+              "remote_user": 1.7801914657519218,
+              "remote_system": 18.0570184825379
+            },
+            "sender_tcp_congestion": "cubic",
+            "receiver_tcp_congestion": "cubic"
+          },
+          "head_system_cpu_busy_percent": 5.268914050437468
+        }
+      },
+      "raw_artifact_sha256": {
+        "api.json": "c06f0c18028a584917d587fa3c4ce0d0d01ad42625447280f4a92c40dc4824af",
+        "before.json": "113ff4fba6fcb4b4c0f9ba067b4d770fe41904b1376556af8b1879e2e2324da1",
+        "after.json": "c1e8ce9611473f275a9a8c7597f54222125899de095ee82ea6d78323223f40ed",
+        "cleanup.json": "ed9cb91a65dbb8a2be885236dc4ce57d2a869432cdc15f6e169a3a5c1a7e7cba",
+        "profiles.json": "82142eae206a2a6963bba096c6e8e133c7e92a9a0115bf2bdd340d7f20d09b52",
+        "lab.json": "b08f0397043afade8a1d5283dcb740e7a5917978db4e1c8c49ad2d862f7b2870",
+        "model-manifest.json": "e66fe44f84d36b97a1808a81d0b8895126f02433d68fd76da6577647eaa677e1",
+        "rank0/server.log": "c9715e9b52f90134789345c436b4914e127338391ec2362fe53e34ef6b099835",
+        "rank1/server.log": "a0a9d50e3b4737f246aa7032e79992403eb6bda90c3d805826621dd1775fc471",
+        "fault.json": "9e77a70279feb317094e8c89db22d09242877d666d6875f6c18ba1885039174a",
+        "captures.json": "f00b9c9bf04187572caf4e96deabe39899653ba32781fe7e43b4f3a581ce39d4",
+        "nccl-0.json": "122f6d1447c1cd98beac66081211d9321e4e1090c95329d45a7344efa596272f",
+        "nccl-1.json": "07f1ac7b5f40875fd9f296f9a99dd512f52c13db96821df751b32cfe0ca10a65"
+      }
+    },
+    "20261003235510-vllm-large-pp2-76186f": {
+      "result": {
+        "run": "20261003235510-vllm-large-pp2-76186f",
+        "backend": "vllm",
+        "model": "large",
+        "pp": 2,
+        "passed": true
+      },
+      "versions": {
+        "python": "3.12.3",
+        "torch": "2.13.0+cu129",
+        "cuda": "12.9",
+        "packages": {
+          "vllm": "0.29.0+cu129",
+          "transformers": "5.16.1",
+          "triton": "3.7.1",
+          "huggingface-hub": "1.30.0"
+        },
+        "weight_tensors": {
+          "BF16": {
+            "parameters": 14768307200,
+            "bytes": 29536614400
+          }
+        },
+        "nccl_torch_reported": [
+          2,
+          29,
+          7
+        ],
+        "nccl_runtime_logged": [
+          "2.30.7"
+        ]
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "image": "vllm/vllm-openai:v0.29.0-cu129@sha256:7ef5a35d1ef8ce2cf9d671dd91eec6e367c5849262e0362b4d3d4a26be0d87d2",
+          "argv": [
+            "vllm",
+            "serve",
+            "/models/Qwen3-14B/40c069824f4251a91eefaf281ebe4c544efd3e18",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--distributed-executor-backend",
+            "mp",
+            "--tensor-parallel-size",
+            "1",
+            "--pipeline-parallel-size",
+            "2",
+            "--nnodes",
+            "2",
+            "--node-rank",
+            "0",
+            "--master-addr",
+            "10.231.0.1",
+            "--master-port",
+            "29501",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "1",
+            "--max-num-batched-tokens",
+            "4096",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--cpu-offload-gb",
+            "0",
+            "--enforce-eager",
+            "--no-enable-prefix-caching",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "30000"
+          ],
+          "environment": {
+            "NCCL_DEBUG": "INFO",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "NCCL_IB_DISABLE": "1",
+            "VLLM_HOST_IP": "10.231.0.1",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "NCCL_NET": "Socket",
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_SHM_DISABLE": "1",
+            "SGLANG_HOST_IP": "10.231.0.1",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "NCCL_SOCKET_IFNAME": "=wg0"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 17756 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-83a5e615-f17d-1786-3685-23c663eb5dc5, 595.91.07, 20475 MiB, 18106 MiB, 0 %",
+          "peak_sampled_gpu_mib": 18106,
+          "peak_sampled_gpu_utilization_percent": 100,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: x27wlSaBw/UTh6gTOnzFeF1Rsjy91c8oAVBrtH8aPx4=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 580bu6XXgrXjg7k38+mmIF5Uphg2jFqLDL2z53QGVjI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 second ago\n  transfer: 180 B received, 272 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: x27wlSaBw/UTh6gTOnzFeF1Rsjy91c8oAVBrtH8aPx4=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 580bu6XXgrXjg7k38+mmIF5Uphg2jFqLDL2z53QGVjI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 minute, 32 seconds ago\n  transfer: 286.54 MiB received, 334.36 MiB sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "0ccc845a54d0:107:107 [0] NCCL INFO NET/Socket : Using [0]wg0:10.231.0.1<0>",
+            "0ccc845a54d0:107:107 [0] NCCL INFO Using network Socket",
+            "(Worker pid=107) INFO 10-03 23:56:13 [parallel_state.py:2119] rank 0 in world size 2 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A",
+            "(Worker_PP0 pid=107) INFO 10-03 23:56:15 [model_runner.py:404] Model loading took 13.76 GiB memory and 2.430461 seconds",
+            "0ccc845a54d0:107:107 [0] NCCL INFO Using network Socket",
+            "0ccc845a54d0:107:107 [0] NCCL INFO Using network Socket"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: x27wlSaBw/UTh6gTOnzFeF1Rsjy91c8oAVBrtH8aPx4=\n  private key: (hidden)\n  listening port: 51888\n\npeer: 580bu6XXgrXjg7k38+mmIF5Uphg2jFqLDL2z53QGVjI=\n  endpoint: 192.168.100.3:51888\n  allowed ips: 10.231.0.2/32\n  latest handshake: 1 minute, 16 seconds ago\n  transfer: 284.72 MiB received, 284.85 MiB sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": [
+            "(Worker pid=107) INFO 10-03 23:56:12 [pynccl.py:113] vLLM is using nccl==2.30.7",
+            "0ccc845a54d0:107:107 [0] NCCL INFO NCCL version 2.30.7+cuda12.9"
+          ]
+        },
+        {
+          "rank": 1,
+          "image": "vllm/vllm-openai:v0.29.0-cu129@sha256:7ef5a35d1ef8ce2cf9d671dd91eec6e367c5849262e0362b4d3d4a26be0d87d2",
+          "argv": [
+            "vllm",
+            "serve",
+            "/models/Qwen3-14B/40c069824f4251a91eefaf281ebe4c544efd3e18",
+            "--served-model-name",
+            "pilot",
+            "--dtype",
+            "bfloat16",
+            "--distributed-executor-backend",
+            "mp",
+            "--tensor-parallel-size",
+            "1",
+            "--pipeline-parallel-size",
+            "2",
+            "--nnodes",
+            "2",
+            "--node-rank",
+            "1",
+            "--master-addr",
+            "10.231.0.1",
+            "--master-port",
+            "29501",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "1",
+            "--max-num-batched-tokens",
+            "4096",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--cpu-offload-gb",
+            "0",
+            "--enforce-eager",
+            "--no-enable-prefix-caching",
+            "--headless"
+          ],
+          "environment": {
+            "GLOO_SOCKET_IFNAME": "wg0",
+            "NCCL_SHM_DISABLE": "1",
+            "NCCL_SOCKET_FAMILY": "AF_INET",
+            "TORCH_NCCL_ASYNC_ERROR_HANDLING": "1",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "30",
+            "VLLM_HOST_IP": "10.231.0.2",
+            "SGLANG_HOST_IP": "10.231.0.2",
+            "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+            "NCCL_SOCKET_IFNAME": "=wg0",
+            "NCCL_IB_DISABLE": "1",
+            "NCCL_P2P_DISABLE": "1",
+            "NCCL_DEBUG": "INFO",
+            "TORCH_NCCL_WAIT_TIMEOUT_DUMP_MILSEC": "1000",
+            "NCCL_NET": "Socket"
+          },
+          "gpu_ready": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-a0aea187-6c11-dba2-5bc1-557a6caf9fc3, 595.91.07, 20475 MiB, 17840 MiB, 0 %",
+          "gpu_after": "name, uuid, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]\nNVIDIA RTX 4000 SFF Ada Generation, GPU-a0aea187-6c11-dba2-5bc1-557a6caf9fc3, 595.91.07, 20475 MiB, 18258 MiB, 0 %",
+          "peak_sampled_gpu_mib": 18258,
+          "peak_sampled_gpu_utilization_percent": 100,
+          "sampling_period_ms": 200,
+          "wireguard_before": "interface: wg0\n  public key: 580bu6XXgrXjg7k38+mmIF5Uphg2jFqLDL2z53QGVjI=\n  private key: (hidden)\n  listening port: 51888\n\npeer: x27wlSaBw/UTh6gTOnzFeF1Rsjy91c8oAVBrtH8aPx4=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 second ago\n  transfer: 124 B received, 180 B sent\n  persistent keepalive: every 5 seconds",
+          "wireguard_after": "interface: wg0\n  public key: 580bu6XXgrXjg7k38+mmIF5Uphg2jFqLDL2z53QGVjI=\n  private key: (hidden)\n  listening port: 51888\n\npeer: x27wlSaBw/UTh6gTOnzFeF1Rsjy91c8oAVBrtH8aPx4=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 minute, 32 seconds ago\n  transfer: 334.36 MiB received, 286.54 MiB sent\n  persistent keepalive: every 5 seconds",
+          "log_evidence": [
+            "c42d3aa4d513:72:72 [0] NCCL INFO NET/Socket : Using [0]wg0:10.231.0.2<0>",
+            "c42d3aa4d513:72:72 [0] NCCL INFO Using network Socket",
+            "(Worker pid=72) INFO 10-03 23:56:13 [parallel_state.py:2119] rank 1 in world size 2 is assigned as DP rank 0, PP rank 1, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A",
+            "(Worker_PP1 pid=72) INFO 10-03 23:56:15 [model_runner.py:404] Model loading took 13.76 GiB memory and 2.249733 seconds",
+            "c42d3aa4d513:72:72 [0] NCCL INFO Using network Socket",
+            "c42d3aa4d513:72:72 [0] NCCL INFO Using network Socket"
+          ],
+          "cpu_offload_gb": 0,
+          "wireguard_ready": "interface: wg0\n  public key: 580bu6XXgrXjg7k38+mmIF5Uphg2jFqLDL2z53QGVjI=\n  private key: (hidden)\n  listening port: 51888\n\npeer: x27wlSaBw/UTh6gTOnzFeF1Rsjy91c8oAVBrtH8aPx4=\n  endpoint: 192.168.100.2:51888\n  allowed ips: 10.231.0.1/32\n  latest handshake: 1 minute, 16 seconds ago\n  transfer: 284.85 MiB received, 284.72 MiB sent\n  persistent keepalive: every 5 seconds",
+          "nccl_runtime_log": [
+            "c42d3aa4d513:72:72 [0] NCCL INFO NCCL version 2.30.7+cuda12.9"
+          ]
+        }
+      ],
+      "sse": {
+        "usage": {
+          "prompt_tokens": 31,
+          "total_tokens": 61,
+          "completion_tokens": 30
+        },
+        "finish_reason": "stop",
+        "done": true,
+        "error": null,
+        "seconds": 3.352502891997574,
+        "content_chunks": 29,
+        "ttft_ms": 227.43541099771392,
+        "inter_chunk_ms_p50": 107.7820890059229,
+        "inter_chunk_ms_p95": 108.04569600441027
+      },
+      "cancel_recovery_seconds": 0.4915069060079986,
+      "long_prefill": {
+        "seconds": 1.7577489039977081,
+        "usage": {
+          "prompt_tokens": 2070,
+          "total_tokens": 2072,
+          "completion_tokens": 2,
+          "prompt_tokens_details": null,
+          "completion_tokens_details": null
+        }
+      },
+      "fixtures": [
+        {
+          "prompt": "Reply with exactly OK.",
+          "text": "OK.",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 17,
+            "total_tokens": 20,
+            "completion_tokens": 3,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        },
+        {
+          "prompt": "What is 2 + 2? Answer with just the number.",
+          "text": "4",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 26,
+            "total_tokens": 28,
+            "completion_tokens": 2,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        },
+        {
+          "prompt": "Continue the sequence, using commas: 1, 2, 3, 4,",
+          "text": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 31,
+            "total_tokens": 61,
+            "completion_tokens": 30,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          }
+        }
+      ],
+      "isolation": [
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        },
+        {
+          "passed": true,
+          "interfaces": [
+            "lo",
+            "wg0"
+          ],
+          "default_route": false
+        }
+      ],
+      "cleanup": [
+        {
+          "stopped": "cocoon-pilot-20261003235510-vllm-large-pp2-76186f",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        },
+        {
+          "stopped": "cocoon-pilot-20261003235510-vllm-large-pp2-76186f",
+          "gpu": "pid, process_name, used_gpu_memory [MiB]"
+        }
+      ],
+      "source_sha256": {
+        "pilot.py": "e86e5a870c5a6cc41a20e990d8c9ddd1d893610c9bb73a3c97b37a76b47cef89",
+        "metadata.py": "1c5225270803b8f58f79ffa771b11c5263a1d5ee39d679ad9295df4d698b74e4",
+        "host.py": "a65846b478ff1bda72fad0acded8f26435bf64b9cf42925b9ab4704cd2834225",
+        "nccl_probe.py": "b86fc7ad97da94e6e7c76d1c7449cf1ae212103d16788535480035076da809de",
+        "test_pilot.py": "d319f4f221b4a9b232115b0e632784dfdba63f61df4a12bf0e8fd22e8b92710b",
+        "probe.py": "6e08bfd73527555b5f2536557b38ffb661ed7b8df9389f37c3ebcb55e90b6681",
+        "evidence.py": "1be52cc45344b21b1adf48f89512b05fad0ea3796de5714566e0d5ffa8028514",
+        "fetch_models.py": "bf7205aba9cf111d8dee73588f70800919165226d72d9873809ff25410268c3c"
+      },
+      "fault": {
+        "usage": null,
+        "finish_reason": null,
+        "done": true,
+        "error": {
+          "message": "EngineCore encountered an issue. See stack trace (above) for the root cause.",
+          "type": "InternalServerError",
+          "param": null,
+          "code": 500
+        },
+        "seconds": 32.551415530993836,
+        "content_chunks": 24,
+        "ttft_ms": 139.29689599899575,
+        "inter_chunk_ms_p50": 107.74299199692905,
+        "inter_chunk_ms_p95": 107.87587000231724,
+        "failure_mode": "transport-error",
+        "passed": true
+      },
+      "capture": [
+        {
+          "packets": 50000,
+          "wireguard_udp": 50000,
+          "tcp": 0,
+          "other_udp": 0,
+          "passed": true
+        },
+        {
+          "packets": 50000,
+          "wireguard_udp": 50000,
+          "tcp": 0,
+          "other_udp": 0,
+          "passed": true
+        }
+      ],
+      "nccl": {
+        "rank": 0,
+        "torch": "2.13.0+cu129",
+        "cuda": "12.9",
+        "measurements": [
+          {
+            "bytes": 16384,
+            "iterations": 30,
+            "seconds": 0.06710586400004104,
+            "round_trip_ms": 2.2368621333347014,
+            "payload_mbit_s": 117.19273892360867
+          },
+          {
+            "bytes": 65536,
+            "iterations": 30,
+            "seconds": 0.06452019300195388,
+            "round_trip_ms": 2.1506731000651294,
+            "payload_mbit_s": 487.55712803040393
+          },
+          {
+            "bytes": 67108864,
+            "iterations": 4,
+            "seconds": 4.831835607008543,
+            "round_trip_ms": 1207.9589017521357,
+            "payload_mbit_s": 888.8893673804178
+          }
+        ],
+        "env": {
+          "NCCL_DEBUG_SUBSYS": "INIT,NET,ENV",
+          "NCCL_DEBUG": "INFO",
+          "NCCL_SHM_DISABLE": "1",
+          "NCCL_SOCKET_IFNAME": "=wg0",
+          "NCCL_P2P_DISABLE": "1",
+          "NCCL_SOCKET_FAMILY": "AF_INET",
+          "GLOO_SOCKET_IFNAME": "wg0",
+          "NCCL_IB_DISABLE": "1",
+          "NCCL_NET": "Socket"
+        },
+        "nccl_torch_reported": [
+          2,
+          29,
+          7
+        ],
+        "nccl_runtime_logged": [
+          "2.30.7"
+        ]
+      },
+      "raw_artifact_sha256": {
+        "api.json": "731027eed47edacd74c7b3964f85d72f8845d5228c0f81cf34bb86d39169b144",
+        "before.json": "29aee14f1c5de1f645e75ec32b2392f5e4bc394cd9460782718c6de07c09c37d",
+        "after.json": "ea59f409ee592b758087f6be8a3794b5d5d0bb3ab3349ba3e20f8695d5b3136f",
+        "cleanup.json": "aa31dba135a40d20889d1d035aae6b2c833b0666f92ed449137c47276b975980",
+        "profiles.json": "82142eae206a2a6963bba096c6e8e133c7e92a9a0115bf2bdd340d7f20d09b52",
+        "lab.json": "b08f0397043afade8a1d5283dcb740e7a5917978db4e1c8c49ad2d862f7b2870",
+        "model-manifest.json": "7689d512a517d98aa684df5e2b0b0b90a51358220465f2b5b6c4eaa81dda0a93",
+        "rank0/server.log": "fedc151de44143d6bba953ae6e2285f0b28366dd3afd35f0fd8745a198937973",
+        "rank1/server.log": "9cd660a4377462310d1843edc059ea9475d745a1e86d33e857a82e321a61a4e9",
+        "fault.json": "8d1f7d1fbaa9d92986fc3dce742d1df3649ac5e93d5427bbb3ead7b6d028b70b",
+        "captures.json": "f00b9c9bf04187572caf4e96deabe39899653ba32781fe7e43b4f3a581ce39d4",
+        "nccl-0.json": "1581708a9bb122c19cc6abbbee8646786e7d274e2b802e2bebefe5fd8df14227",
+        "nccl-1.json": "c6f4e401a24692a975fe6642f93cc52eb6d15220f4bb2e5b3b1b64af410a9bea"
+      }
+    }
+  }
+}

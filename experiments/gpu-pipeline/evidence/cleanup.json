@@ -1,0 +1,26 @@
+[
+  {
+    "checked_at_utc": "2026-10-03T23:58:43.780070+00:00",
+    "pilot_containers": "",
+    "gpu_processes": "pid, process_name, used_gpu_memory [MiB]",
+    "gpu": "memory.used [MiB], utilization.gpu [%]\n2 MiB, 0 %",
+    "wg_listeners": [],
+    "keys": [],
+    "live_monitor_processes": [],
+    "host_wireguard_interfaces": "[]",
+    "existing_gpu_container": "vllm-head",
+    "existing_gpu_container_status": "exited"
+  },
+  {
+    "checked_at_utc": "2026-10-03T23:58:43.784955+00:00",
+    "pilot_containers": "",
+    "gpu_processes": "pid, process_name, used_gpu_memory [MiB]",
+    "gpu": "memory.used [MiB], utilization.gpu [%]\n2 MiB, 0 %",
+    "wg_listeners": [],
+    "keys": [],
+    "live_monitor_processes": [],
+    "host_wireguard_interfaces": "[]",
+    "existing_gpu_container": "vllm-worker",
+    "existing_gpu_container_status": "exited"
+  }
+]
