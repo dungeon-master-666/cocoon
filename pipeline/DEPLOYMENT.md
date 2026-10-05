@@ -31,6 +31,9 @@ sudo apt-get install -y docker.io python3 iproute2 util-linux iputils-arping
 
 Если запускаете GPU внутри VM, сначала выполните процедуру passthrough из
 [раздела 2 плана](../pipeline-plan.md#перевод-gpu-в-pcie-passthrough).
+Для текущего двухмашинного стенда есть отдельный [QEMU/VFIO launcher и инструкция](VM-DEPLOYMENT.md):
+он создаёт настоящие VM и управляет detach/reattach через libvirt `managed=yes`,
+поэтому ручной `nodedev-detach` перед его запуском не нужен.
 На физическом хосте устройство принадлежит VFIO, внутри guest — NVIDIA;
 в deployment JSON указывается **guest BDF**. Не назначайте одну GPU двум VM
 или одновременно VM и host-контейнеру. На bare metal VFIO не требуется.

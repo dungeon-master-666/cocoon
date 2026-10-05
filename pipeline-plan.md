@@ -1,6 +1,6 @@
 # План разработки MVP: один Cocoon worker с pipeline
 
-Дата: 2026-10-04. Статус: шаги 1–4 и 6–11 проверены согласно отчётам; шаг 5 отложен, шаги 12–13 впереди. SGLang и vLLM PP=2 интегрированы с Cocoon и отдельно проверены на двух RTX.
+Дата: 2026-10-05. Статус: шаги 1–4 и 6–12 проверены согласно отчётам; шаг 5 отложен, шаг 13 впереди. SGLang и vLLM PP=2 интегрированы с Cocoon и отдельно проверены на двух RTX; vLLM дополнительно проверен внутри двух QEMU/VFIO VM.
 
 Архитектура и ограничения описаны в [pipeline-design.md](/Users/ms/Developer/cocoon/pipeline-design.md). Весь pipeline представлен одним worker; внутренние стадии используют один выбранный backend — SGLang или vLLM — и обмениваются данными через WireGuard. Proxy сохраняет существующий контракт запросов и расчётов.
 
@@ -68,6 +68,11 @@ lspci -nnk -s 01:00
 Команда переводит PCI-функции `01:00.0` и `01:00.1` на `vfio-pci`; по выводу `lspci` проверить фактический driver binding. Это подготовка к передаче устройства VM. Создание VM и назначение ей PCI-устройств выполняются отдельно.
 
 Для первого эксперимента с SGLang/vLLM в контейнерах непосредственно на хосте GPU должна быть доступна хостовому NVIDIA-драйверу. Passthrough нужен при переходе к испытаниям в VM; его не включаем как обязательный предварительный шаг контейнерного запуска.
+
+Для двух настоящих dev VM реализован [QEMU/VFIO launcher](pipeline/VM-DEPLOYMENT.md).
+Он использует libvirt `managed=yes`, сам передаёт оба PCI function GPU гостю и
+проверяет их возврат после остановки; перед ним ручной `nodedev-detach` не нужен.
+vLLM/Qwen3-14B PP=2 проверен этим способом — [отчёт](pipeline/VM-REPORT.md).
 
 ## 3. Этапы реализации
 
@@ -343,6 +348,13 @@ sudo python3 test/test-pipeline-network.py --build-dir /opt/cocoon-build
 Инструкция — [DEPLOYMENT.md](pipeline/DEPLOYMENT.md), версии, команды, результаты
 и неуспешные промежуточные попытки — [STEP12-REPORT.md](pipeline/STEP12-REPORT.md).
 
+**Дополнение VM/VFIO (2026-10-05):** на каждом GPU-хосте создана настоящая
+QEMU/KVM VM с managed passthrough GPU + audio. В гостях проверен vLLM/Qwen3-14B:
+один видимый worker, JSON/SSE, WireGuard, изоляция, SIGKILL cleanup и повторный
+запрос. Проверены cold stop/start VM и возврат хостовых драйверов. Команды и
+точные результаты — [VM-DEPLOYMENT.md](pipeline/VM-DEPLOYMENT.md) и
+[VM-REPORT.md](pipeline/VM-REPORT.md). SGLang в VM этим прогоном не квалифицирован.
+
 **Изменение для ревью:** генерация per-host bundles с profiles, одинаковыми artifacts, endpoints, ресурсами и командами запуска. Обработка частичного запуска и остановки. Для MVP — явный dev-режим; ручной запуск bundle на каждом хосте достаточен.
 
 **Проверка:** Linux VM с симулятором, затем две RTX. Чистое развёртывание по инструкции; неверный artifact/endpoint; частично стартовавшая группа; повторный запуск и cleanup. Placement одной или нескольких машин использует общие agent/adapters.
@@ -376,12 +388,21 @@ image/profile требуют детализации production-этапа в р�
 
 **Осознанные границы MVP:** два rank, IPv4 LAN, закреплённые Qwen3 profiles, одна
 GPU-последовательность, ручной запуск per-host bundle. Проверены simulator в Linux
-VM и GPU на bare metal; GPU passthrough в VM описан в разделе 2, но этим прогоном
-не квалифицирован. Dev-контейнеры не обеспечивают аппаратную конфиденциальность
+VM, SGLang/vLLM на bare metal и отдельно vLLM на двух настоящих QEMU/VFIO VM.
+SGLang в VM, hotplug/reset fault matrix и аварии гипервизора не квалифицированы.
+Dev-контейнеры и обычные VM не обеспечивают аппаратную конфиденциальность
 и не заменяют CVM provisioner. Другие модели, batching, LoRA, quantization,
 оптимизации и production orchestration требуют отдельного решения о scope.
 
-**Новых работ вне плана не выявлено.** Ссылки и статусы прежних записей сохранены.
+**Прежние открытые работы:** ссылки и статусы записей сохранены; дополнительные
+границы VM-варианта перечислены ниже.
+
+**После VM-дополнения:** measured/reproducible guest image и real verifier
+остаются частью P7-01; dev guest ставит APT-пакеты из актуального репозитория.
+Для production VM provisioning дополнительно предусмотреть отдельную квалификацию
+GPU reset/hotplug, аварий QEMU/хоста, восстановления device ownership и ресурсов.
+Это не реализовано текущим launcher и не включено в функциональную GPU-приёмку
+шага 13; миграция/HA и multi-tenant scheduler также требуют отдельного решения.
 
 ### Шаг 13. Приёмка MVP
 

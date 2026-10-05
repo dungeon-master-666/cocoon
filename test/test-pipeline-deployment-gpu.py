@@ -48,7 +48,7 @@ class Lab:
             self.hosts[rank]['ssh']+':'+source,destination],timeout=1800)
 
 
-def main():
+def main(lab_type=Lab):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--backend',required=True,choices=('sglang','vllm'))
     p.add_argument('--model',choices=('small','large'),default='large')
@@ -58,13 +58,15 @@ def main():
     p.add_argument('--image-archive',help='existing completed docker save archive on head, if member needs image')
     p.add_argument('--output',type=Path,required=True)
     args=p.parse_args();args.output.mkdir(parents=True,exist_ok=False)
-    lab=Lab(json.loads(args.lab.read_text()),args.remote_dir)
+    lab=lab_type(json.loads(args.lab.read_text()),args.remote_dir)
     artifact=json.loads(lab.ssh(0,['cat',args.artifact_dir+'/artifact.json']).stdout)
     require(artifact['backend']==args.backend,'artifact backend differs')
     (args.output/'artifact.json').write_text(json.dumps(artifact,indent=2)+'\n')
     print('Verifying image on both hosts',flush=True)
-    lab.both(lambda r:lab.ssh(r,['sudo','-n','docker','image','inspect',artifact['base_image']]))
     if lab.ssh(1,['sudo','-n','docker','image','inspect',artifact['image_id']],False).returncode:
+        # The lab's partial transfer format requires the pinned base. A full
+        # runtime archive already loaded into clean VMs needs only its exact ID.
+        lab.both(lambda r:lab.ssh(r,['sudo','-n','docker','image','inspect',artifact['base_image']]))
         require(args.image_archive,'member needs exact image; pass --image-archive with a completed archive on head')
         print('Transferring image archive',flush=True)
         local=args.output/'image.tar';lab.download(0,args.image_archive,local)
@@ -84,7 +86,8 @@ def main():
         name='head' if rank==0 else 'member'
         config['hosts'].append({'id':name,'hostname':h['hostname'],'interface':lab.config['underlay_interface']})
         config['ranks'].append({'host':name,'underlay':str(ipaddress.IPv4Address(h['lan'])+10)+'/24',
-            'cpus':'0-7','memory_mib':24576,'gpu':bdf.lower()[-12:], 'model_root':lab.config['remote_dir']+'/models'})
+            'cpus':'0-7','memory_mib':24576,'gpu':bdf.lower()[-12:],
+            'model_root':lab.config.get('model_root',lab.config['remote_dir']+'/models')})
     (args.output/'deployment.json').write_text(json.dumps(config,indent=2)+'\n')
     generated=bundle.generate(config,artifact,args.output/'bundles')
     deployment=generated['deployment_id'];names=['cocoon-pipeline-'+deployment[:20]+'-'+str(r) for r in (0,1)]
@@ -130,6 +133,25 @@ def main():
         value=json.loads(deploy(0,'request').stdout)
         require(value.get('choices') and value.get('usage',{}).get('total_tokens',0)>0,'Cocoon response/usage missing')
         result['response']=value;record('identical pinned image; real PP=2 Cocoon response with usage')
+        stream_code='''import json,urllib.request
+model=json.load(open('/state/services.json'))['model']
+with urllib.request.urlopen('http://127.0.0.1:10000/v1/models',timeout=10) as response:
+    models=json.load(response)['data']
+workers=[m['workers'] for m in models if m['id'].split('@')[0]==model]
+assert len(workers)==1 and len(workers[0])==1, workers
+body=json.dumps({'model':model,'messages':[{'role':'user','content':'Say hello.'}],'max_tokens':32,'stream':True}).encode()
+request=urllib.request.Request('http://127.0.0.1:10000/v1/chat/completions',data=body,headers={'Content-Type':'application/json'})
+with urllib.request.urlopen(request,timeout=120) as response:
+    data=response.read().decode()
+events=[line[5:].strip() for line in data.splitlines() if line.startswith('data:')]
+assert events and events[-1]=='[DONE]', data
+chunks=[json.loads(e) for e in events[:-1]]
+assert any(c.get('choices') for c in chunks), data
+print(json.dumps({'workers':1,'chunks':len(chunks),'done':True}))
+'''
+        stream=lab.ssh(0,['sudo','-n','docker','exec',names[0],'nsenter','--net=/run/netns/underlay',
+                         '/usr/bin/python3','-c',stream_code])
+        result['stream']=json.loads(stream.stdout);record('one visible Cocoon worker and complete SSE response')
         identifiers=[]
         for rank in (0,1):
             obj=json.loads(lab.ssh(rank,['sudo','-n','docker','inspect',names[rank]]).stdout)[0];identifiers.append(obj['Id'])

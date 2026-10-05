@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "mode": "dev",
+  "backend": "vllm",
+  "model": "large",
+  "hosts": [
+    {"id": "head", "hostname": "cocoon-pipeline-vm-head", "interface": "lan0"},
+    {"id": "member", "hostname": "cocoon-pipeline-vm-member", "interface": "lan0"}
+  ],
+  "ranks": [
+    {"host": "head", "underlay": "192.168.100.32/24", "cpus": "0-7", "memory_mib": 24576,
+     "gpu": "0000:09:00.0", "model_root": "/srv/cocoon-models"},
+    {"host": "member", "underlay": "192.168.100.33/24", "cpus": "0-7", "memory_mib": 24576,
+     "gpu": "0000:09:00.0", "model_root": "/srv/cocoon-models"}
+  ],
+  "services": {"mode": "local-fake-ton", "coefficient": 1000},
+  "startup_timeout": 900
+}
